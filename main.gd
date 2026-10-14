@@ -18,7 +18,13 @@ var monitor_node: Node3D = null
 var monitor_screen: MeshInstance3D
 var monitor_viewport: SubViewport = null
 var monitor_ui_root: Control = null
-var monitor_state: String = "off"
+var windows_sim: WindowsSimulator = null
+var monitor_state: String:
+	get:
+		return windows_sim.current_state if windows_sim else "off"
+	set(val):
+		if windows_sim:
+			windows_sim.current_state = val
 var monitor_action_cb: Callable = Callable()
 var monitor_camera_focused: bool = false
 var pc_booted = false
@@ -127,7 +133,12 @@ var usb_drive_plugged = false         # Вставлена ли флешка в 
 var usb_flash_node: Node3D = null
 var usb_front_plugged_node: Node3D = null
 var windows_installed = false         # Установлена ли ОС Windows
-var is_installing_windows = false
+var is_installing_windows: bool:
+	get:
+		return windows_sim.is_installing if windows_sim else false
+	set(val):
+		if windows_sim:
+			windows_sim.is_installing = val
 
 # ============================================
 # МЕМ-КЛАВИАТУРА «6» И «7»
@@ -138,7 +149,12 @@ var key7_node: Node3D = null
 # ============================================
 # РИКРОЛЛ
 # ============================================
-var rickroll_active = false
+var rickroll_active: bool:
+	get:
+		return windows_sim.rickroll_active if windows_sim else false
+	set(val):
+		if windows_sim:
+			windows_sim.rickroll_active = val
 var rickroll_overlay: CanvasLayer = null
 
 # ============================================
@@ -1479,11 +1495,15 @@ func build_monitor():
 	monitor_viewport.transparent_bg = false
 	add_child(monitor_viewport)
 
-	monitor_ui_root = Control.new()
-	monitor_ui_root.name = "MonitorUIRoot"
-	monitor_ui_root.custom_minimum_size = Vector2(960, 640)
-	monitor_ui_root.size = Vector2(960, 640)
-	monitor_viewport.add_child(monitor_ui_root)
+	windows_sim = WindowsSimulator.new()
+	windows_sim.name = "WindowsSimulator"
+	windows_sim.custom_minimum_size = Vector2(960, 640)
+	windows_sim.size = Vector2(960, 640)
+	monitor_viewport.add_child(windows_sim)
+	monitor_ui_root = windows_sim
+
+	windows_sim.installation_finished.connect(_on_windows_installation_finished)
+	windows_sim.os_crashed.connect(_on_windows_os_crashed)
 
 	var screen_mat = StandardMaterial3D.new()
 	screen_mat.shading_mode = StandardMaterial3D.SHADING_MODE_UNSHADED
@@ -1493,125 +1513,28 @@ func build_monitor():
 	set_monitor_screen_off()
 
 func set_monitor_screen_off():
-	monitor_state = "off"
-	monitor_action_cb = Callable()
-	if not monitor_ui_root: return
-	for c in monitor_ui_root.get_children():
-		c.queue_free()
-	var bg = ColorRect.new()
-	bg.size = Vector2(960, 640)
-	bg.color = Color(0.015, 0.015, 0.02, 1.0)
-	monitor_ui_root.add_child(bg)
+	if windows_sim:
+		windows_sim.power_off()
 	if monitor_screen:
 		monitor_screen.get_surface_override_material(0).albedo_color = Color(0.1, 0.1, 0.1)
 
 func set_monitor_screen_no_signal():
-	monitor_state = "no_signal"
-	monitor_action_cb = Callable()
-	if not monitor_ui_root: return
-	for c in monitor_ui_root.get_children():
-		c.queue_free()
+	if windows_sim:
+		windows_sim.show_no_signal()
 	if monitor_screen:
 		monitor_screen.get_surface_override_material(0).albedo_color = Color.WHITE
-
-	var bg = ColorRect.new()
-	bg.size = Vector2(960, 640)
-	bg.color = Color(0.02, 0.03, 0.05, 1.0)
-	monitor_ui_root.add_child(bg)
-
-	var center = CenterContainer.new()
-	center.size = Vector2(960, 640)
-	monitor_ui_root.add_child(center)
-
-	var box = PanelContainer.new()
-	box.custom_minimum_size = Vector2(500, 220)
-	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.10, 0.16, 0.95)
-	sb.border_width_left = 3
-	sb.border_width_right = 3
-	sb.border_width_top = 3
-	sb.border_width_bottom = 3
-	sb.border_color = Color(0.3, 0.6, 0.9, 0.9)
-	sb.corner_radius_top_left = 12
-	sb.corner_radius_top_right = 12
-	sb.corner_radius_bottom_left = 12
-	sb.corner_radius_bottom_right = 12
-	box.add_theme_stylebox_override("panel", sb)
-	center.add_child(box)
-
-	var vb = VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 14)
-	vb.alignment = BoxContainer.ALIGNMENT_CENTER
-	box.add_child(vb)
-
-	var t1 = Label.new()
-	t1.text = "НЕТ СИГНАЛА"
-	t1.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t1.add_theme_font_size_override("font_size", 32)
-	t1.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
-	vb.add_child(t1)
-
-	var t2 = Label.new()
-	t2.text = "Вход: HDMI 1\nПроверьте подключение видеокабеля между ПК и монитором."
-	t2.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	t2.add_theme_font_size_override("font_size", 18)
-	t2.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95))
-	vb.add_child(t2)
 
 func set_monitor_screen_bios(lines: Array, alert_type: String = ""):
-	monitor_state = "bios"
-	monitor_action_cb = Callable()
-	if not monitor_ui_root: return
-	for c in monitor_ui_root.get_children():
-		c.queue_free()
+	if windows_sim:
+		windows_sim.show_bios(lines, alert_type)
 	if monitor_screen:
 		monitor_screen.get_surface_override_material(0).albedo_color = Color.WHITE
 
-	var bg = ColorRect.new()
-	bg.size = Vector2(960, 640)
-	bg.color = Color(0.01, 0.03, 0.08, 1.0)
-	monitor_ui_root.add_child(bg)
-
-	var margin = MarginContainer.new()
-	margin.size = Vector2(960, 640)
-	margin.add_theme_constant_override("margin_left", 40)
-	margin.add_theme_constant_override("margin_right", 40)
-	margin.add_theme_constant_override("margin_top", 32)
-	margin.add_theme_constant_override("margin_bottom", 32)
-	monitor_ui_root.add_child(margin)
-
-	var vb = VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 12)
-	margin.add_child(vb)
-
-	var header = Label.new()
-	header.text = "ASUS UEFI BIOS Utility - POST INITIALIZATION"
-	header.add_theme_font_size_override("font_size", 24)
-	header.add_theme_color_override("font_color", Color(0.3, 0.7, 1.0))
-	vb.add_child(header)
-
-	var sep = HSeparator.new()
-	vb.add_child(sep)
-
-	for l in lines:
-		var lbl = Label.new()
-		lbl.text = l
-		lbl.add_theme_font_size_override("font_size", 17)
-		lbl.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
-		vb.add_child(lbl)
-
-	if alert_type == "no_cooler":
-		var alert = Label.new()
-		alert.text = "\n[ КРИТИЧЕСКАЯ ОШИБКА: КУЛЕР CPU НЕ УСТАНОВЛЕН! ]\nТемпература процессора: 105 C!\nСработала аварийная термозащита. Выключение питания..."
-		alert.add_theme_font_size_override("font_size", 20)
-		alert.add_theme_color_override("font_color", Color(1.0, 0.2, 0.2))
-		vb.add_child(alert)
-	elif alert_type == "no_paste":
-		var alert = Label.new()
-		alert.text = "\n[ ВНИМАНИЕ: ТЕРМОПАСТА НЕ НАНЕСЕНА! ]\nТемпература процессора: 100 C! Троттлинг 100%.\nСработала аварийная термозащита. Выключение питания..."
-		alert.add_theme_font_size_override("font_size", 20)
-		alert.add_theme_color_override("font_color", Color(1.0, 0.5, 0.1))
-		vb.add_child(alert)
+func set_monitor_screen_desktop():
+	if windows_sim:
+		windows_sim.show_desktop()
+	if monitor_screen:
+		monitor_screen.get_surface_override_material(0).albedo_color = Color.WHITE
 
 func _is_monitor_screen(collider) -> bool:
 	if not collider: return false
@@ -1625,6 +1548,8 @@ func try_interact_monitor() -> bool:
 	if not raycast or not raycast.is_colliding(): return false
 	var collider = raycast.get_collider()
 	if not _is_monitor_screen(collider): return false
+	if windows_sim and windows_sim.handle_interaction():
+		return true
 	if monitor_action_cb and monitor_action_cb.is_valid():
 		monitor_action_cb.call()
 		return true
@@ -2511,6 +2436,8 @@ func _input(event):
 					if wire_done or connected_wires.size() >= 4:
 						exit_wiring_mode()
 					return
+				if windows_sim and windows_sim.handle_interaction():
+					return
 				if monitor_action_cb and monitor_action_cb.is_valid():
 					monitor_action_cb.call()
 					return
@@ -2523,6 +2450,8 @@ func _input(event):
 					if can_boot or (player and pc_case and player.global_position.distance_to(pc_case.global_position) < 3.0):
 						try_boot_pc()
 			KEY_ENTER:
+				if windows_sim and windows_sim.handle_interaction():
+					return
 				if monitor_action_cb and monitor_action_cb.is_valid():
 					monitor_action_cb.call()
 					return
@@ -3549,6 +3478,12 @@ func boot_sequence():
 	play_boot_sound()
 	show_message("Реле БП замкнуто (CLACK)! Дежурное питание подано... POST тест...")
 	play_beep_sound()
+	if windows_sim:
+		var cpu_name_str = parts["cpu"].get_meta("name") if parts.has("cpu") else "Intel Core i7"
+		var gpu_name_str = parts["gpu"].get_meta("name") if parts.has("gpu") else "NVIDIA RTX 4070 Ti"
+		var ssd_name_str = parts["ssd"].get_meta("name") if parts.has("ssd") else "1TB NVMe SSD"
+		windows_sim.set_hardware_info(cpu_name_str, gpu_name_str, "32GB DDR5-5600", ssd_name_str)
+
 	if not hdmi_cable_connected:
 		set_monitor_screen_no_signal()
 	else:
@@ -3560,8 +3495,8 @@ func boot_sequence():
 		play_error_sound()
 		play_beep_sound()
 		flash_screen(Color(1.0, 0.15, 0.0))
-		if hdmi_cable_connected:
-			set_monitor_screen_bios(["ASUS POST: Проверка процессора...", "CPU: " + parts["cpu"].get_meta("name")], "no_cooler")
+		if hdmi_cable_connected and windows_sim:
+			windows_sim.show_alert("no_cooler")
 		show_error("КРИТИЧЕСКИЙ ПЕРЕГРЕВ CPU (105°C)!\nКулер не был установлен! Температура ядра подскочила за 2 секунды.\nСработала аварийная термозащита (Thermal Shutdown). ПК экстренно выключен!")
 		score = max(0, score - 25)
 		update_score_display()
@@ -3580,8 +3515,8 @@ func boot_sequence():
 		play_error_sound()
 		play_beep_sound()
 		flash_screen(Color(1.0, 0.35, 0.0))
-		if hdmi_cable_connected:
-			set_monitor_screen_bios(["ASUS POST: Проверка кулера и термопасты...", "Кулер: Установлен", "Термопаста: НЕ ОБНАРУЖЕНА!"], "no_paste")
+		if hdmi_cable_connected and windows_sim:
+			windows_sim.show_alert("no_paste")
 		show_error("ПЕРЕГРЕВ CPU (100°C)! Кулер установлен, но НЕТ ТЕРМОПАСТЫ!\nВоздушный зазор между CPU и кулером не отводит тепло.\nТроттлинг 100% -> Аварийное отключение!")
 		score = max(0, score - 20)
 		update_score_display()
@@ -3644,26 +3579,26 @@ func boot_sequence():
 	if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "power_button":
 		advance_guided_step()
 
-	# 1. Показываем Рикролл на мониторе
-	show_rickroll_modal(func():
-		# 2. После закрытия Рикролла: Установка Windows 11
-		show_windows_installer_wizard(func():
-			# 3. После установки Windows 11
-			windows_installed = true
-			timer_active = false
-			build_end_time = Time.get_ticks_msec()
-			var elapsed = (build_end_time - build_start_time) / 1000.0
-			is_booting = false
-			if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "windows_install":
-				advance_guided_step()
-			if current_mode == "speedrun":
-				show_speedrun_victory_podium(elapsed)
-			elif current_mode == "guided":
-				show_certificate(elapsed)
-			else:
-				show_message("ПК работает! Поздравляем, %s! Windows 11 успешно установлена! (F5 — перезапуск)" % player_name)
-		)
-	)
+	if windows_sim:
+		windows_sim.start_boot_sequence()
+
+func _on_windows_installation_finished():
+	windows_installed = true
+	timer_active = false
+	build_end_time = Time.get_ticks_msec()
+	var elapsed = (build_end_time - build_start_time) / 1000.0
+	is_booting = false
+	if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "windows_install":
+		advance_guided_step()
+	if current_mode == "speedrun":
+		show_speedrun_victory_podium(elapsed)
+	elif current_mode == "guided":
+		show_certificate(elapsed)
+	else:
+		show_message("ПК работает! Поздравляем, %s! Windows 11 успешно установлена! (F5 — перезапуск)" % player_name)
+
+func _on_windows_os_crashed(_reason: String):
+	pass
 
 func flash_screen(color: Color):
 	if not monitor_screen: return
@@ -5990,524 +5925,16 @@ func toggle_usb_drive():
 
 
 # ============================================================
-# РИКРОЛЛ (RICKROLL) ПОСЛЕ ЗАПУСКА ПК
+# РИКРОЛЛ И WINDOWS 11 (ДЕЛЕГИРОВАНИЕ В WINDOWS_SIMULATOR)
 # ============================================================
-func _find_rickroll_video() -> String:
-	var common = [
-		"res://videos/rickroll.ogv",
-		"res://videos/rick.ogv",
-		"res://videos/video.ogv",
-		"res://videos/rickroll.mp4"
-	]
-	for p in common:
-		if FileAccess.file_exists(p) or ResourceLoader.exists(p):
-			return p
-	var dir = DirAccess.open("res://videos")
-	if dir:
-		dir.list_dir_begin()
-		var fn = dir.get_next()
-		while fn != "":
-			if not dir.current_is_dir():
-				var lower = fn.to_lower()
-				if lower.ends_with(".ogv") or lower.ends_with(".mp4"):
-					return "res://videos/" + fn
-			fn = dir.get_next()
-	return ""
-
 func show_rickroll_modal(on_continue: Callable):
-	rickroll_active = true
-	monitor_state = "rickroll"
-
-	var video_path = _find_rickroll_video()
-	var has_real_video = (video_path != "")
-	if not has_real_video:
-		play_rickroll_tune()
-
-	if monitor_screen:
-		monitor_screen.get_surface_override_material(0).albedo_color = Color.WHITE
-
-	if not monitor_ui_root: return
-	for c in monitor_ui_root.get_children():
-		c.queue_free()
-
-	# Фоновый прямоугольник окна плеера на мониторе
-	var bg = ColorRect.new()
-	bg.size = Vector2(960, 640)
-	bg.color = Color(0.05, 0.06, 0.09, 1.0)
-	monitor_ui_root.add_child(bg)
-
-	var vbox = VBoxContainer.new()
-	vbox.size = Vector2(920, 600)
-	vbox.position = Vector2(20, 20)
-	vbox.add_theme_constant_override("separation", 10)
-	monitor_ui_root.add_child(vbox)
-
-	# Заголовок окна в стиле медиаплеера
-	var title_bar = PanelContainer.new()
-	var tb_sb = StyleBoxFlat.new()
-	tb_sb.bg_color = Color(0.14, 0.15, 0.22, 1.0)
-	tb_sb.corner_radius_top_left = 10
-	tb_sb.corner_radius_top_right = 10
-	tb_sb.content_margin_left = 16
-	tb_sb.content_margin_right = 16
-	tb_sb.content_margin_top = 8
-	tb_sb.content_margin_bottom = 8
-	title_bar.add_theme_stylebox_override("panel", tb_sb)
-	vbox.add_child(title_bar)
-
-	var title_lbl = Label.new()
-	title_lbl.text = "YouTube: Rick Astley - Never Gonna Give You Up (Official Music Video)"
-	title_lbl.add_theme_font_size_override("font_size", 18)
-	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.85))
-	title_bar.add_child(title_lbl)
-
-	# Видео-зона
-	var video_panel = PanelContainer.new()
-	video_panel.custom_minimum_size = Vector2(920, 370)
-	var vp_sb = StyleBoxFlat.new()
-	vp_sb.bg_color = Color(0.02, 0.02, 0.04, 1.0)
-	vp_sb.corner_radius_top_left = 6
-	vp_sb.corner_radius_top_right = 6
-	vp_sb.corner_radius_bottom_left = 6
-	vp_sb.corner_radius_bottom_right = 6
-	video_panel.add_theme_stylebox_override("panel", vp_sb)
-	vbox.add_child(video_panel)
-
-	var video_player: VideoStreamPlayer = null
-
-	if has_real_video:
-		video_player = VideoStreamPlayer.new()
-		video_player.custom_minimum_size = Vector2(920, 370)
-		video_player.expand = true
-		video_player.loop = true
-		var stream = null
-		if ResourceLoader.exists(video_path):
-			stream = load(video_path)
-		if not stream:
-			var theora = VideoStreamTheora.new()
-			theora.file = video_path
-			stream = theora
-		if stream:
-			video_player.stream = stream
-			video_panel.add_child(video_player)
-			video_player.play()
-
-	if not has_real_video or not video_player or not video_player.is_playing():
-		var anim_box = CenterContainer.new()
-		anim_box.custom_minimum_size = Vector2(920, 370)
-		video_panel.add_child(anim_box)
-
-		var dancer_label = Label.new()
-		dancer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		dancer_label.add_theme_font_size_override("font_size", 34)
-		anim_box.add_child(dancer_label)
-
-		var dancer_frames = [
-			"   (o_o)   o-\n  <)   )>\n   /    \\",
-			"   ( o_o) \n ~(   (> o-\n   /    \\",
-			"   (o_o) \n  <)   )> o-\n   /    \\",
-			" -o (o_o)\n  <(   (>\n   /    \\",
-			"   (o_o)   o-\n  <)   )>\n   /    \\",
-			"   ( o_o) \n ~(   (> o-\n  _|    |_"
-		]
-		var frame_idx = 0
-		var dance_timer = Timer.new()
-		dance_timer.wait_time = 0.22
-		dance_timer.autostart = true
-		monitor_ui_root.add_child(dance_timer)
-		dance_timer.timeout.connect(func():
-			dancer_label.text = dancer_frames[frame_idx % dancer_frames.size()]
-			frame_idx += 1
-		)
-		dancer_label.text = dancer_frames[0]
-
-	var lyrics_lbl = Label.new()
-	lyrics_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	if has_real_video:
-		lyrics_lbl.text = "Воспроизведение: " + video_path.get_file()
-	else:
-		lyrics_lbl.text = "Never gonna give you up! (Видео можно положить в папку videos)"
-	lyrics_lbl.add_theme_font_size_override("font_size", 16)
-	lyrics_lbl.add_theme_color_override("font_color", Color(1.0, 0.8, 0.3))
-	vbox.add_child(lyrics_lbl)
-
-	# Скраббер таймлайна
-	var time_lbl = Label.new()
-	time_lbl.text = "0:42 / 3:32  |  1080p 60fps  |  Volume: 100%"
-	time_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	time_lbl.add_theme_font_size_override("font_size", 14)
-	time_lbl.add_theme_color_override("font_color", Color(0.6, 0.65, 0.75))
-	vbox.add_child(time_lbl)
-
-	# КНОПКА «ПРОДОЛЖИТЬ»
-	var continue_btn = Button.new()
-	continue_btn.text = "ПРОДОЛЖИТЬ (Закрыть Рикролл) [E / Пробел / Enter]"
-	continue_btn.custom_minimum_size = Vector2(480, 52)
-	var cbtn_sb = StyleBoxFlat.new()
-	cbtn_sb.bg_color = Color(0.85, 0.25, 0.20, 1.0)
-	cbtn_sb.corner_radius_top_left = 10
-	cbtn_sb.corner_radius_top_right = 10
-	cbtn_sb.corner_radius_bottom_left = 10
-	cbtn_sb.corner_radius_bottom_right = 10
-	continue_btn.add_theme_stylebox_override("normal", cbtn_sb)
-	continue_btn.add_theme_font_size_override("font_size", 18)
-	vbox.add_child(continue_btn)
-
-	var close_action = func():
-		if not rickroll_active: return
-		rickroll_active = false
-		monitor_action_cb = Callable()
-		if video_player and is_instance_valid(video_player):
-			video_player.stop()
-		play_success_sound()
-		on_continue.call()
-
-	monitor_action_cb = close_action
-	continue_btn.pressed.connect(close_action)
-	show_message("На мониторе запущен Рикролл! [E / Пробел / Enter / Z — приблизить]")
-
-func play_rickroll_tune():
-	var notes = [293.7, 329.6, 392.0, 329.6, 493.9, 440.0, 392.0, 329.6]
-	for i in range(notes.size()):
-		var n = notes[i]
-		get_tree().create_timer(i * 0.16).timeout.connect(func():
-			if rickroll_active:
-				_gen_sound(n, 0.14, 18.0, 0.22)
-		)
+	if windows_sim:
+		windows_sim.start_rickroll(on_continue)
 
 func show_windows_installer_wizard(on_finish: Callable):
-	is_installing_windows = true
-	monitor_state = "win_setup"
-	if monitor_screen:
-		monitor_screen.get_surface_override_material(0).albedo_color = Color.WHITE
+	if windows_sim:
+		windows_sim.start_installer(on_finish)
 
-	if not monitor_ui_root: return
-	for c in monitor_ui_root.get_children():
-		c.queue_free()
-
-	# Фон мастера установки Windows 11
-	var bg = ColorRect.new()
-	bg.size = Vector2(960, 640)
-	bg.color = Color(0.02, 0.06, 0.14, 1.0)
-	monitor_ui_root.add_child(bg)
-
-	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(900, 580)
-	card.position = Vector2(30, 30)
-	var card_sb = StyleBoxFlat.new()
-	card_sb.bg_color = Color(0.08, 0.12, 0.22, 0.98)
-	card_sb.border_width_left = 2
-	card_sb.border_width_right = 2
-	card_sb.border_width_top = 2
-	card_sb.border_width_bottom = 2
-	card_sb.border_color = Color(0.2, 0.55, 0.95, 0.9)
-	card_sb.corner_radius_top_left = 14
-	card_sb.corner_radius_top_right = 14
-	card_sb.corner_radius_bottom_left = 14
-	card_sb.corner_radius_bottom_right = 14
-	card.add_theme_stylebox_override("panel", card_sb)
-	monitor_ui_root.add_child(card)
-
-	var vbox = VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 16)
-	card.add_child(vbox)
-
-	# Заголовок мастера с логотипом Windows
-	var top_bar = HBoxContainer.new()
-	top_bar.add_theme_constant_override("separation", 12)
-	vbox.add_child(top_bar)
-
-	var win_logo = Label.new()
-	win_logo.text = "Windows 11 Setup"
-	win_logo.add_theme_font_size_override("font_size", 24)
-	win_logo.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-	top_bar.add_child(win_logo)
-
-	var content_container = VBoxContainer.new()
-	content_container.custom_minimum_size = Vector2(860, 480)
-	vbox.add_child(content_container)
-
-	show_message("На мониторе открыт мастер установки Windows 11! [E / Enter / Пробел / Z]")
-
-	# Слайд 1: Выбор языка и параметров
-	_render_win_slide_1(content_container, func():
-		# Слайд 2: Ключ продукта
-		_render_win_slide_2(content_container, func():
-			# Слайд 3: Выбор SSD диска
-			_render_win_slide_3(content_container, func():
-				# Слайд 4: Копирование и установка файлов с анимированным прогрессом
-				_render_win_slide_4(content_container, func():
-					# Финал: рабочий стол Windows 11 прямо на мониторе!
-					is_installing_windows = false
-					monitor_action_cb = Callable()
-					play_windows_startup_jingle()
-					set_monitor_screen_desktop()
-					on_finish.call()
-				)
-			)
-		)
-	)
-
-func _render_win_slide_1(container: VBoxContainer, next_cb: Callable):
-	for c in container.get_children(): c.queue_free()
-	var h1 = Label.new()
-	h1.text = "Программа установки Windows 11"
-	h1.add_theme_font_size_override("font_size", 24)
-	container.add_child(h1)
-
-	var desc = Label.new()
-	desc.text = "Выберите язык, время и денежные единицы, а также метод ввода клавиатуры:\n\n• Язык установки: Русский (Россия)\n• Формат времени: Русский (Россия)\n• Раскладка клавиатуры: Русская\n\nНажмите 'Далее' для продолжения."
-	desc.add_theme_font_size_override("font_size", 17)
-	container.add_child(desc)
-
-	var btn = Button.new()
-	btn.text = "Далее > [E / Enter]"
-	btn.custom_minimum_size = Vector2(260, 48)
-	btn.add_theme_font_size_override("font_size", 16)
-	container.add_child(btn)
-
-	var step1_next = func():
-		play_click_sound()
-		for c in container.get_children(): c.queue_free()
-		var h_inst = Label.new()
-		h_inst.text = "Установить Windows 11 сейчас"
-		h_inst.add_theme_font_size_override("font_size", 24)
-		container.add_child(h_inst)
-
-		var info = Label.new()
-		info.text = "Программа установки готова к развертыванию Windows 11 на этот компьютер."
-		info.add_theme_font_size_override("font_size", 16)
-		container.add_child(info)
-
-		var btn_inst = Button.new()
-		btn_inst.text = "Установить сейчас [E / Enter]"
-		btn_inst.custom_minimum_size = Vector2(280, 52)
-		btn_inst.add_theme_font_size_override("font_size", 18)
-		container.add_child(btn_inst)
-
-		var step1_finish = func():
-			play_click_sound()
-			next_cb.call()
-
-		monitor_action_cb = step1_finish
-		btn_inst.pressed.connect(step1_finish)
-
-	monitor_action_cb = step1_next
-	btn.pressed.connect(step1_next)
-
-func _render_win_slide_2(container: VBoxContainer, next_cb: Callable):
-	for c in container.get_children(): c.queue_free()
-	var h2 = Label.new()
-	h2.text = "Активация Windows"
-	h2.add_theme_font_size_override("font_size", 24)
-	container.add_child(h2)
-
-	var desc = Label.new()
-	desc.text = "Если вы устанавливаете Windows впервые, введите ключ продукта.\nКлюч продукта состоит из 25 символов:"
-	desc.add_theme_font_size_override("font_size", 17)
-	container.add_child(desc)
-
-	var key_input = LineEdit.new()
-	key_input.text = "VK7JG-NPHTM-C97JM-9MPGT-3V66T"
-	key_input.editable = false
-	key_input.custom_minimum_size = Vector2(460, 44)
-	key_input.add_theme_font_size_override("font_size", 16)
-	container.add_child(key_input)
-
-	var btn = Button.new()
-	btn.text = "У меня нет ключа продукта / Далее > [E / Enter]"
-	btn.custom_minimum_size = Vector2(420, 48)
-	btn.add_theme_font_size_override("font_size", 16)
-	container.add_child(btn)
-
-	var step2_next = func():
-		play_click_sound()
-		next_cb.call()
-
-	monitor_action_cb = step2_next
-	btn.pressed.connect(step2_next)
-
-func _render_win_slide_3(container: VBoxContainer, next_cb: Callable):
-	for c in container.get_children(): c.queue_free()
-	var h3 = Label.new()
-	h3.text = "Где вы хотите установить Windows?"
-	h3.add_theme_font_size_override("font_size", 24)
-	container.add_child(h3)
-
-	var ssd_name = parts["ssd"].get_meta("name") if parts.has("ssd") else "NVMe M.2 SSD"
-	var disk_lbl = Label.new()
-	disk_lbl.text = "Обнаруженные накопители:\n\nДиск 0: Незанятое пространство на диске (%s, 1000.0 ГБ)\nТип: Высокоскоростной накопитель NVMe PCIe 4.0\nСостояние: Готов к разметке и установке" % ssd_name
-	disk_lbl.add_theme_font_size_override("font_size", 17)
-	disk_lbl.add_theme_color_override("font_color", Color(0.2, 0.9, 0.5))
-	container.add_child(disk_lbl)
-
-	var btn = Button.new()
-	btn.text = "Выбрать Диск 0 и начать установку > [E / Enter]"
-	btn.custom_minimum_size = Vector2(420, 50)
-	btn.add_theme_font_size_override("font_size", 16)
-	container.add_child(btn)
-
-	var step3_next = func():
-		play_click_sound()
-		next_cb.call()
-
-	monitor_action_cb = step3_next
-	btn.pressed.connect(step3_next)
-
-func _render_win_slide_4(container: VBoxContainer, finish_cb: Callable):
-	monitor_action_cb = Callable()
-	for c in container.get_children(): c.queue_free()
-	var h4 = Label.new()
-	h4.text = "Идет установка Windows 11..."
-	h4.add_theme_font_size_override("font_size", 24)
-	container.add_child(h4)
-
-	var steps_lbl = Label.new()
-	steps_lbl.text = "[OK] Копирование файлов Windows (100%)\n[...] Подготовка файлов для установки (0%)...\n- Установка компонентов\n- Установка обновлений\n- Завершение"
-	steps_lbl.add_theme_font_size_override("font_size", 17)
-	container.add_child(steps_lbl)
-
-	var progress_bar = ProgressBar.new()
-	progress_bar.custom_minimum_size = Vector2(700, 28)
-	progress_bar.value = 0
-	container.add_child(progress_bar)
-
-	var tween = create_tween()
-	tween.tween_method(func(val):
-		progress_bar.value = val
-		steps_lbl.text = "[OK] Копирование файлов Windows (100%%)\n[OK] Подготовка файлов для установки (%d%%)\n[...] Установка компонентов...\n- Установка обновлений\n- Завершение" % int(val)
-	, 0.0, 100.0, 3.5)
-	tween.tween_callback(func():
-		steps_lbl.text = "[OK] Копирование файлов Windows (100%)\n[OK] Подготовка файлов для установки (100%)\n[OK] Установка компонентов (100%)\n[OK] Установка обновлений (100%)\n[OK] Завершение установки (100%)\n\nПерезагрузка в Windows 11 через 1 секунду..."
-		play_success_sound()
-	)
-	tween.tween_interval(1.2)
-	tween.tween_callback(finish_cb)
-
-func play_windows_startup_jingle():
-	var j_notes = [261.6, 392.0, 329.6, 493.9]
-	for i in range(j_notes.size()):
-		var n = j_notes[i]
-		get_tree().create_timer(i * 0.18).timeout.connect(func():
-			_gen_sound(n, 0.45, 8.0, 0.28)
-		)
-
-func set_monitor_screen_desktop():
-	monitor_state = "desktop"
-	monitor_action_cb = Callable()
-	if not monitor_ui_root: return
-	for c in monitor_ui_root.get_children():
-		c.queue_free()
-
-	if monitor_screen:
-		monitor_screen.get_surface_override_material(0).albedo_color = Color.WHITE
-
-	# Обои Windows 11 Bloom (глубокий стильный синий фон)
-	var bg = ColorRect.new()
-	bg.size = Vector2(960, 640)
-	bg.color = Color(0.04, 0.12, 0.28, 1.0)
-	monitor_ui_root.add_child(bg)
-
-	# Иконки на рабочем столе
-	var desktop_icons = VBoxContainer.new()
-	desktop_icons.position = Vector2(24, 24)
-	desktop_icons.add_theme_constant_override("separation", 18)
-	monitor_ui_root.add_child(desktop_icons)
-
-	var icons_list = ["Этот компьютер", "Корзина", "Microsoft Edge", "Панель управления", "Бенчмарк"]
-	for item_name in icons_list:
-		var item_box = HBoxContainer.new()
-		item_box.add_theme_constant_override("separation", 8)
-		desktop_icons.add_child(item_box)
-
-		var ico_badge = PanelContainer.new()
-		ico_badge.custom_minimum_size = Vector2(28, 28)
-		var ib_sb = StyleBoxFlat.new()
-		ib_sb.bg_color = Color(0.2, 0.45, 0.85, 0.85)
-		ib_sb.corner_radius_top_left = 6
-		ib_sb.corner_radius_top_right = 6
-		ib_sb.corner_radius_bottom_left = 6
-		ib_sb.corner_radius_bottom_right = 6
-		ico_badge.add_theme_stylebox_override("panel", ib_sb)
-		item_box.add_child(ico_badge)
-
-		var lbl = Label.new()
-		lbl.text = item_name
-		lbl.add_theme_font_size_override("font_size", 14)
-		lbl.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0))
-		item_box.add_child(lbl)
-
-	# Центральное окно приветствия Windows 11
-	var center = CenterContainer.new()
-	center.size = Vector2(960, 580)
-	monitor_ui_root.add_child(center)
-
-	var win = PanelContainer.new()
-	win.custom_minimum_size = Vector2(520, 260)
-	var win_sb = StyleBoxFlat.new()
-	win_sb.bg_color = Color(0.08, 0.12, 0.22, 0.94)
-	win_sb.border_width_left = 2
-	win_sb.border_width_right = 2
-	win_sb.border_width_top = 2
-	win_sb.border_width_bottom = 2
-	win_sb.border_color = Color(0.3, 0.65, 1.0, 0.8)
-	win_sb.corner_radius_top_left = 12
-	win_sb.corner_radius_top_right = 12
-	win_sb.corner_radius_bottom_left = 12
-	win_sb.corner_radius_bottom_right = 12
-	win.add_theme_stylebox_override("panel", win_sb)
-	center.add_child(win)
-
-	var vb = VBoxContainer.new()
-	vb.add_theme_constant_override("separation", 10)
-	vb.alignment = BoxContainer.ALIGNMENT_CENTER
-	win.add_child(vb)
-
-	var w_title = Label.new()
-	w_title.text = "Добро пожаловать в Windows 11 Pro!"
-	w_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	w_title.add_theme_font_size_override("font_size", 20)
-	w_title.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0))
-	vb.add_child(w_title)
-
-	var cpu_str = parts["cpu"].get_meta("name") if parts.has("cpu") else "Intel Core i7"
-	var gpu_str = parts["gpu"].get_meta("name") if parts.has("gpu") else "GeForce RTX"
-	var w_desc = Label.new()
-	w_desc.text = "ПК успешно собран, подключен и работает!\n\nCPU: %s\nRAM: 32 GB DDR5 (5600 MHz)\nGPU: %s\nSSD: 1 TB NVMe (Диск C:)\nСтатус: Все драйверы оборудования активны." % [cpu_str, gpu_str]
-	w_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	w_desc.add_theme_font_size_override("font_size", 14)
-	w_desc.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
-	vb.add_child(w_desc)
-
-	# Панель задач Windows 11 внизу
-	var taskbar = PanelContainer.new()
-	taskbar.size = Vector2(960, 52)
-	taskbar.position = Vector2(0, 588)
-	var tb_sb = StyleBoxFlat.new()
-	tb_sb.bg_color = Color(0.06, 0.08, 0.14, 0.96)
-	tb_sb.border_width_top = 1
-	tb_sb.border_color = Color(0.2, 0.3, 0.5, 0.6)
-	taskbar.add_theme_stylebox_override("panel", tb_sb)
-	monitor_ui_root.add_child(taskbar)
-
-	var tb_h = HBoxContainer.new()
-	tb_h.custom_minimum_size = Vector2(940, 52)
-	tb_h.alignment = BoxContainer.ALIGNMENT_CENTER
-	taskbar.add_child(tb_h)
-
-	var tb_btns = ["[ Пуск ]", "[ Поиск ]", "[ Задачи ]", "[ Проводник ]", "[ Браузер ]"]
-	for b_name in tb_btns:
-		var b_lbl = Label.new()
-		b_lbl.text = "  " + b_name + "  "
-		b_lbl.add_theme_font_size_override("font_size", 14)
-		b_lbl.add_theme_color_override("font_color", Color(0.8, 0.9, 1.0))
-		tb_h.add_child(b_lbl)
-
-	var tray = Label.new()
-	tray.text = "    RU | 100% | Сеть: OK | 12:00"
-	tray.add_theme_font_size_override("font_size", 13)
-	tray.add_theme_color_override("font_color", Color(0.65, 0.75, 0.9))
-	tb_h.add_child(tray)
 
 
 # ============================================================
