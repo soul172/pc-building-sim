@@ -548,6 +548,16 @@ func _ready():
 	camera_ctrl.name = "CameraController"
 	camera_ctrl.setup(self)
 	add_child(camera_ctrl)
+
+	# Синхронизация пошагового режима при внешних изменениях состояния
+	wiring_mgr.cable_disconnected.connect(func(_id): if guided_mgr: guided_mgr.recalculate_current_step())
+	tools_mgr.motherboard_screwed_state_changed.connect(func(_sc, _cnt): if guided_mgr: guided_mgr.recalculate_current_step())
+	tools_mgr.thermal_paste_applied_state_changed.connect(func(_appl): if guided_mgr: guided_mgr.recalculate_current_step())
+	power_mgr.psu_cable_toggled.connect(func(_plugged): if guided_mgr: guided_mgr.recalculate_current_step())
+	power_mgr.psu_switch_toggled.connect(func(_on): if guided_mgr: guided_mgr.recalculate_current_step())
+	peripherals_mgr.hdmi_state_changed.connect(func(_conn): if guided_mgr: guided_mgr.recalculate_current_step())
+	peripherals_mgr.usb_state_changed.connect(func(_plugged): if guided_mgr: guided_mgr.recalculate_current_step())
+
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -903,6 +913,11 @@ func _input(event):
 				if not in_wiring_mode: press_meme_key("6")
 			KEY_7:
 				if not in_wiring_mode: press_meme_key("7")
+			KEY_C:
+				if in_wiring_mode:
+					exit_wiring_mode()
+				else:
+					start_wiring_mode()
 			KEY_E:      interact()
 			KEY_X:
 				if in_wiring_mode:
@@ -1010,6 +1025,10 @@ func interact():
 
 	# 0. Проверяем интерактивное питание 220V, тумблер БП и кнопку питания
 	if try_interact_power():
+		return
+
+	# Проверяем взаимодействие с проводкой и БП (Wiring)
+	if try_interact_wiring():
 		return
 
 	# Проверяем клик по клавишам «6» и «7» клавиатуры
@@ -1143,6 +1162,9 @@ func advance_guided_step():
 
 func show_step_hint():
 	if guided_mgr: guided_mgr.show_step_hint()
+
+func recalculate_guided_step():
+	if guided_mgr: guided_mgr.recalculate_current_step()
 
 # ============================================
 # ОЧКИ И ОШИБКИ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
@@ -1295,6 +1317,9 @@ func drop_held_wire():
 
 func try_plug_wire_to_socket(socket_id: String):
 	if wiring_mgr: wiring_mgr.try_plug_wire_to_socket(socket_id)
+
+func try_interact_wiring() -> bool:
+	return wiring_mgr.try_interact_wiring() if wiring_mgr else false
 
 func get_wire_display_name(wire_id: String) -> String:
 	return wiring_mgr.get_wire_display_name(wire_id) if wiring_mgr else wire_id

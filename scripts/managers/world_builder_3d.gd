@@ -253,14 +253,16 @@ func toggle_case_lid() -> void:
 		tween.tween_callback(func(): main.case_lid.visible = false)
 		main.play_click_sound()
 		main.show_message("Боковая крышка открыта")
+		if main.guided_mgr:
+			main.guided_mgr.recalculate_current_step()
 	else:
 		main.case_lid.visible = true
 		var tween = main.create_tween()
 		tween.tween_property(main.case_lid, "position:x", 0.245, 0.3)
 		main.play_click_sound()
 		main.show_message("Боковая крышка закрыта")
-		if main.current_mode == "guided" and main.current_step < main.guided_steps.size() and main.guided_steps[main.current_step] == "case_lid":
-			main.advance_guided_step()
+		if main.guided_mgr:
+			main.guided_mgr.advance_guided_step()
 
 # ============================================================
 # МАТЕРИНСКАЯ ПЛАТА И СЛОТЫ

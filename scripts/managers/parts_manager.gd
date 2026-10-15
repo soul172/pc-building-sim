@@ -48,7 +48,7 @@ func get_part_display_name(id: String) -> String:
 		"gpu":             "Видеокарта (в слот PCIe)",
 		"ssd":             "SSD накопитель (в слот M.2)",
 		"case_fan":        "Корпусной вентилятор 120mm (на выдув)",
-		"wiring":          "Кабели питания БП (подключить разъёмы к плате)",
+		"wiring":          "Кабели питания БП (нажмите [E] на БП или клавишу [C])",
 		"case_lid":        "Боковая крышка корпуса (нажмите F, чтобы закрыть)",
 		"hdmi":            "Кабель HDMI (подключить от видеокарты к монитору)",
 		"usb_drive":       "Флешка Windows 11 (вставить в USB-порт на задней панели ПК)",
@@ -111,8 +111,26 @@ func try_pickup() -> bool:
 	if best_part:
 		# Проверка пошагового режима
 		if main.current_mode == "guided":
+			if main.guided_mgr:
+				main.guided_mgr.recalculate_current_step()
 			var next = main.guided_steps[main.current_step] if main.current_step < main.guided_steps.size() else ""
+			var p_id = best_part.get_meta("id") if best_part.has_meta("id") else ""
+			var p_type = best_part.get_meta("type") if best_part.has_meta("type") else ""
+
+			# Проверяем, нужна ли деталь для любого свободного слота
+			var is_needed_part = false
+			if p_id == next:
+				is_needed_part = true
+			elif p_type == "ram" and next in ["ram1", "ram2"]:
+				is_needed_part = true
+			elif main.slots.has(p_id) and not main.slots[p_id]["occupied"]:
+				is_needed_part = true
+			elif p_type == "ram" and ((main.slots.has("ram1") and not main.slots["ram1"]["occupied"]) or (main.slots.has("ram2") and not main.slots["ram2"]["occupied"])):
+				is_needed_part = true
+
 			if best_part == main.motherboard_node:
+				pass
+			elif is_needed_part:
 				pass
 			elif next in ["screwdriver", "thermal_paste", "wiring", "case_lid", "hdmi", "usb_drive", "psu_cable", "psu_switch", "power_button", "windows_install"]:
 				if next == "screwdriver":
@@ -120,7 +138,7 @@ func try_pickup() -> bool:
 				elif next == "thermal_paste":
 					main.show_error("Сейчас нужна термопаста — подойдите к ней и нажмите E или ЛКМ")
 				elif next == "wiring":
-					main.show_error("Сейчас нужно подключить кабели питания БП к разъёмам платы")
+					main.show_error("Сейчас нужно подключить кабели питания БП (нажмите [E] на БП или клавишу [C])")
 				elif next == "case_lid":
 					main.show_error("Сейчас нужно закрыть боковую крышку корпуса — нажмите F")
 				elif next == "hdmi":
@@ -137,7 +155,7 @@ func try_pickup() -> bool:
 					main.show_error("Сейчас нужно установить Windows — следуйте инструкциям на экране")
 				main.add_mistake()
 				return true
-			elif best_part.get_meta("id") != next:
+			elif p_id != next:
 				main.show_error("Сейчас нужно установить: " + get_part_display_name(next))
 				main.add_mistake()
 				return true
@@ -336,9 +354,8 @@ func install_part(slot_id: String) -> void:
 		main.build_start_time = Time.get_ticks_msec()
 
 	if main.current_mode == "guided":
-		var real_step_id = part.get_meta("id")
-		if main.current_step < main.guided_steps.size() and main.guided_steps[main.current_step] == real_step_id:
-			main.advance_guided_step()
+		if main.guided_mgr:
+			main.guided_mgr.advance_guided_step()
 
 	part_installed.emit(slot_id, part)
 
@@ -504,6 +521,9 @@ func extract_part(slot_id: String, depth: int = 0) -> void:
 	part.add_child(static_body)
 
 	part_extracted.emit(slot_id, part)
+	if main.guided_mgr:
+		main.guided_mgr.recalculate_current_step()
+	update_slot_highlights()
 
 # ============================================================
 # ПОДСВЕТКА СЛОТОВ И АНИМАЦИИ

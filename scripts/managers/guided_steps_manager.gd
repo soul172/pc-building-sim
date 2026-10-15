@@ -58,8 +58,70 @@ func is_completed() -> bool:
 	return current_step >= guided_steps.size()
 
 # ============================================
-# ПЕРЕКЛЮЧЕНИЕ ШАГОВ ОБУЧЕНИЯ
+# ПРОВЕРКА И ПЕРЕКЛЮЧЕНИЕ ШАГОВ ОБУЧЕНИЯ
 # ============================================
+func is_step_completed(step: String) -> bool:
+	if not main: return false
+	match step:
+		"motherboard":
+			return main.slots.has("mb_slot") and main.slots["mb_slot"]["occupied"]
+		"screwdriver":
+			return main.mb_screwed
+		"cpu":
+			return main.slots.has("cpu") and main.slots["cpu"]["occupied"]
+		"thermal_paste":
+			return main.thermal_paste_applied
+		"cooler":
+			return main.slots.has("cooler") and main.slots["cooler"]["occupied"]
+		"ram1":
+			return main.slots.has("ram1") and main.slots["ram1"]["occupied"]
+		"ram2":
+			return main.slots.has("ram2") and main.slots["ram2"]["occupied"]
+		"gpu":
+			return main.slots.has("gpu") and main.slots["gpu"]["occupied"]
+		"ssd":
+			return main.slots.has("ssd") and main.slots["ssd"]["occupied"]
+		"case_fan":
+			return main.slots.has("case_fan") and main.slots["case_fan"]["occupied"]
+		"wiring":
+			return main.wire_done
+		"case_lid":
+			return not main.case_lid_open
+		"hdmi":
+			return main.hdmi_cable_connected
+		"usb_drive":
+			return main.usb_drive_plugged
+		"psu_cable":
+			return main.psu_cable_plugged
+		"psu_switch":
+			return main.psu_switch_on
+		"power_button":
+			return main.pc_booted
+		"windows_install":
+			return main.windows_installed
+		_:
+			return false
+
+func recalculate_current_step() -> void:
+	if not main or main.current_mode != "guided": return
+	var first_incomplete = 0
+	while first_incomplete < guided_steps.size():
+		if is_step_completed(guided_steps[first_incomplete]):
+			first_incomplete += 1
+		else:
+			break
+	if current_step != first_incomplete:
+		current_step = first_incomplete
+		show_step_hint()
+		if main.parts_mgr:
+			main.parts_mgr.update_slot_highlights()
+		if current_step < guided_steps.size():
+			step_advanced.emit(current_step, guided_steps[current_step])
+			if guided_steps[current_step] == "wiring" and not main.wire_done:
+				main.call_deferred("start_wiring_mode")
+		else:
+			all_steps_completed.emit()
+
 func advance_guided_step() -> void:
 	if not main or main.current_mode != "guided": return
 	current_step += 1
@@ -67,49 +129,19 @@ func advance_guided_step() -> void:
 	# Автоматически пропускаем уже выполненные шаги
 	while current_step < guided_steps.size():
 		var step = guided_steps[current_step]
-		if step == "motherboard" and main.slots.has("mb_slot") and main.slots["mb_slot"]["occupied"]:
-			current_step += 1
-		elif step == "screwdriver" and main.mb_screwed:
-			current_step += 1
-		elif step == "cpu" and main.slots.has("cpu") and main.slots["cpu"]["occupied"]:
-			current_step += 1
-		elif step == "thermal_paste" and main.thermal_paste_applied:
-			current_step += 1
-		elif step == "cooler" and main.slots.has("cooler") and main.slots["cooler"]["occupied"]:
-			current_step += 1
-		elif step == "ram1" and main.slots.has("ram1") and main.slots["ram1"]["occupied"]:
-			current_step += 1
-		elif step == "ram2" and main.slots.has("ram2") and main.slots["ram2"]["occupied"]:
-			current_step += 1
-		elif step == "gpu" and main.slots.has("gpu") and main.slots["gpu"]["occupied"]:
-			current_step += 1
-		elif step == "ssd" and main.slots.has("ssd") and main.slots["ssd"]["occupied"]:
-			current_step += 1
-		elif step == "case_fan" and main.slots.has("case_fan") and main.slots["case_fan"]["occupied"]:
-			current_step += 1
-		elif step == "wiring" and main.wire_done:
-			current_step += 1
-		elif step == "case_lid" and not main.case_lid_open:
-			current_step += 1
-		elif step == "hdmi" and main.hdmi_cable_connected:
-			current_step += 1
-		elif step == "usb_drive" and main.usb_drive_plugged:
-			current_step += 1
-		elif step == "psu_cable" and main.psu_cable_plugged:
-			current_step += 1
-		elif step == "psu_switch" and main.psu_switch_on:
-			current_step += 1
-		elif step == "power_button" and main.pc_booted:
-			current_step += 1
-		elif step == "windows_install" and main.windows_installed:
+		if is_step_completed(step):
 			current_step += 1
 		else:
 			break
 
 	show_step_hint()
+	if main.parts_mgr:
+		main.parts_mgr.update_slot_highlights()
 
 	if current_step < guided_steps.size():
 		step_advanced.emit(current_step, guided_steps[current_step])
+		if guided_steps[current_step] == "wiring" and not main.wire_done:
+			main.call_deferred("start_wiring_mode")
 	else:
 		all_steps_completed.emit()
 

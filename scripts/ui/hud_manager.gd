@@ -86,7 +86,7 @@ func build_hud() -> void:
 	keys_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	keys_hint.add_theme_font_size_override("font_size", 12)
 	keys_hint.add_theme_color_override("font_color", Color(0.45, 0.55, 0.7))
-	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  P — тумблер БП  |  Z — зум монитора  |  6/7 — клавиши  |  G — глоссарий  |  Space — пуск"
+	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  C — кабели БП  |  P — тумблер БП  |  Z — зум  |  6/7 — клавиши  |  G — глоссарий  |  Space — пуск"
 	hud_canvas.add_child(keys_hint)
 
 	# Карточка характеристик деталей при наведении
@@ -269,6 +269,15 @@ func update_info_card() -> void:
 		var state_str = "ВКЛЮЧЕНО [ I ]" if main.psu_switch_on else "ВЫКЛЮЧЕНО [ 0 ]"
 		var act_str = "выключить [0]" if main.psu_switch_on else "включить [I]"
 		info_label.text = "Тумблер блока питания (I/O Rocker Switch)\nСостояние: %s\n\n[P] - Нажмите, чтобы %s\nСовет: Без тумблера в [I] дежурное питание +5VSB не поступает на материнку." % [state_str, act_str]
+		info_card.visible = true
+		info_card_updated.emit(true, info_label.text)
+		return
+
+	# 2b. Блок питания и внутренние кабели питания (PSU & Wiring)
+	if collider.name == "PSUCaseBody" or (collider.get_parent() and collider.get_parent().name == "PSUCaseBody") or collider.is_in_group("loose_wire_plugs") or (collider.get_parent() and collider.get_parent().is_in_group("loose_wire_plugs")):
+		var wires_cnt = main.connected_wires.size() if main.connected_wires else 0
+		var status_txt = "Все кабели подключены (4/4)" if main.wire_done else "Подключено кабелей: %d/4" % wires_cnt
+		info_label.text = "Блок питания (PSU) и кабели питания\nСостояние: %s\n\n[E], [ЛКМ] или [C] — Открыть режим подключения кабелей (Wiring)\nСовет: Соедините провода 24-Pin ATX, 8-Pin CPU, PCIe и кнопку Front Panel." % status_txt
 		info_card.visible = true
 		info_card_updated.emit(true, info_label.text)
 		return

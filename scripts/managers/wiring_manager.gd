@@ -841,6 +841,24 @@ func spawn_physical_wire(wire_id: String) -> void:
 			s["label"].text = s["name"] + " (Подключен)"
 			s["label"].modulate = Color(0.3, 0.9, 0.4)
 
+func try_interact_wiring() -> bool:
+	if in_wiring_mode or not main or not main.raycast or not main.raycast.is_colliding(): return false
+	var col = main.raycast.get_collider()
+	if not is_instance_valid(col): return false
+
+	var is_psu = (col.name == "PSUCaseBody" or (col.get_parent() and col.get_parent().name == "PSUCaseBody"))
+	var is_plug = (col.is_in_group("loose_wire_plugs") or (col.get_parent() and col.get_parent().is_in_group("loose_wire_plugs")))
+	var is_wiring_step = (main.current_mode == "guided" and main.current_step < main.guided_steps.size() and main.guided_steps[main.current_step] == "wiring" and main.pc_case and main.pc_case.is_ancestor_of(col))
+
+	if is_psu or is_plug or is_wiring_step:
+		if not wire_done:
+			start_wiring_mode()
+			return true
+		else:
+			main.show_message("Все 4 кабеля питания уже подключены. Нажмите [C] для повторного открытия режима проводки.")
+			return true
+	return false
+
 # ============================================================
 # СТАТИЧЕСКИЕ ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ (МЕШИ И КАБЕЛИ)
 # ============================================================

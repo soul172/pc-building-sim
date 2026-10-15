@@ -26,34 +26,6 @@ func try_boot_pc() -> void:
 	if not main: return
 	if is_booting: return
 
-	# 0a. Проверка: Подключение сетевого силового кабеля 220V к БП
-	if not main.psu_cable_plugged:
-		main.show_error("ОШИБКА: Компьютер не подключён к сети 220V!\nОшибка начинающих: забыли вставить силовой кабель IEC C13 в розетку БП сзади корпуса.\nПодойдите к задней панели БП и нажмите [E], чтобы подключить провод!")
-		main.play_error_sound()
-		is_booting = false
-		return
-
-	# 0b. Проверка: Клавишный тумблер I/O на БП
-	if not main.psu_switch_on:
-		main.show_error("ОШИБКА: Тумблер блока питания выключен [0]!\nКлассическая ошибка: на задней стенке БП клавиша I/O стоит в положении [0]. Без неё дежурная линия +5VSB разомкнута.\nПереключите тумблер на задней панели БП в положение [I] (Вкл)!")
-		main.play_error_sound()
-		is_booting = false
-		return
-
-	# 0c. Проверка: Кабель HDMI от видеокарты к монитору
-	if not main.hdmi_cable_connected:
-		main.show_error("НЕТ СИГНАЛА НА МОНИТОРЕ (NO SIGNAL)!\nКабель HDMI не подключен между видеокартой и монитором.\nПодключите кабель HDMI на столе ([E] или [ЛКМ]), чтобы передать картинку на монитор!")
-		main.play_error_sound()
-		is_booting = false
-		return
-
-	# 0d. Проверка: Загрузочная флешка с Windows 11
-	if not main.usb_drive_plugged:
-		main.show_error("NO BOOTABLE DEVICE!\nНакопитель пуст, операционная система не найдена.\nВставьте загрузочную флешку с Windows 11 в USB-порт корпуса ПК ([E] на флешку на столе)!")
-		main.play_error_sound()
-		is_booting = false
-		return
-
 	# 1. Проверяем обязательные компоненты
 	var required = ["cpu", "ram1", "ram2", "gpu", "ssd"]
 	var missing_names = []
@@ -86,6 +58,34 @@ func try_boot_pc() -> void:
 	if main.case_lid_open:
 		main.show_error("Закройте боковую крышку перед включением (нажмите F)!")
 		main.play_error_sound()
+		return
+
+	# 5. Проверка: Кабель HDMI от видеокарты к монитору
+	if not main.hdmi_cable_connected:
+		main.show_error("НЕТ СИГНАЛА НА МОНИТОРЕ (NO SIGNAL)!\nКабель HDMI не подключен между видеокартой и монитором.\nПодключите кабель HDMI на столе ([E] или [ЛКМ]), чтобы передать картинку на монитор!")
+		main.play_error_sound()
+		is_booting = false
+		return
+
+	# 6. Проверка: Загрузочная флешка с Windows 11
+	if not main.usb_drive_plugged:
+		main.show_error("NO BOOTABLE DEVICE!\nНакопитель пуст, операционная система не найдена.\nВставьте загрузочную флешку с Windows 11 в USB-порт корпуса ПК ([E] на флешку на столе)!")
+		main.play_error_sound()
+		is_booting = false
+		return
+
+	# 7. Проверка: Подключение сетевого силового кабеля 220V к БП
+	if not main.psu_cable_plugged:
+		main.show_error("ОШИБКА: Компьютер не подключён к сети 220V!\nОшибка начинающих: забыли вставить силовой кабель IEC C13 в розетку БП сзади корпуса.\nПодойдите к задней панели БП и нажмите [E], чтобы подключить провод!")
+		main.play_error_sound()
+		is_booting = false
+		return
+
+	# 8. Проверка: Клавишный тумблер I/O на БП
+	if not main.psu_switch_on:
+		main.show_error("ОШИБКА: Тумблер блока питания выключен [0]!\nКлассическая ошибка: на задней стенке БП клавиша I/O стоит в положении [0]. Без неё дежурная линия +5VSB разомкнута.\nПереключите тумблер на задней панели БП в положение [I] (Вкл)!")
+		main.play_error_sound()
+		is_booting = false
 		return
 
 	is_booting = true
