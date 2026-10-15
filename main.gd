@@ -25,8 +25,21 @@ var monitor_state: String:
 		if windows_sim:
 			windows_sim.current_state = val
 var monitor_action_cb: Callable = Callable()
-var pc_booted = false
-var is_booting = false
+
+# ============================================
+# ЗАПУСК И ДИАГНОСТИКА ПК (ДЕЛЕГИРОВАНО В BOOT_MANAGER)
+# ============================================
+const BootManagerScript = preload("res://scripts/managers/boot_manager.gd")
+var boot_mgr = null
+
+var pc_booted: bool:
+	get: return boot_mgr.pc_booted if boot_mgr else false
+	set(val): if boot_mgr: boot_mgr.pc_booted = val
+
+var is_booting: bool:
+	get: return boot_mgr.is_booting if boot_mgr else false
+	set(val): if boot_mgr: boot_mgr.is_booting = val
+
 var message_label: Label
 var message_timer = 0.0
 var motherboard_node: Node3D = null
@@ -438,6 +451,10 @@ func _ready():
 	power_mgr.name = "PowerManager"
 	power_mgr.setup(self)
 	add_child(power_mgr)
+	boot_mgr = BootManagerScript.new()
+	boot_mgr.name = "BootManager"
+	boot_mgr.setup(self)
+	add_child(boot_mgr)
 	tools_mgr = ToolsManagerScript.new()
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
@@ -679,15 +696,7 @@ func toggle_psu_cable():
 	if power_mgr: power_mgr.toggle_psu_cable()
 
 func shutdown_pc_emergency(reason: String):
-	var was_on = pc_booted or is_booting
-	pc_booted = false
-	is_booting = false
-	stop_pc_fan_ambient()
-	play_relay_sound(false)
-	play_error_sound()
-	flash_screen(Color(1.0, 0.1, 0.1))
-	set_monitor_screen_off()
-	show_error(reason)
+	if boot_mgr: boot_mgr.shutdown_pc_emergency(reason)
 
 func _is_psu_switch(collider) -> bool:
 	return power_mgr.is_psu_switch(collider) if power_mgr else false
@@ -1081,17 +1090,9 @@ func _process(delta):
 		timer_label.text = "%.1f сек" % elapsed
 
 
-	# Анимация кулера при работе ПК
-	if pc_booted and slots.has("cooler") and slots["cooler"]["occupied"]:
-		var cooler_pid = slots["cooler"].get("part_id", "")
-		if cooler_pid and parts.has(cooler_pid):
-			parts[cooler_pid].rotate_y(delta * 12.0)
-
-	# Анимация корпусного вентилятора при работе ПК
-	if pc_booted and slots.has("case_fan") and slots["case_fan"]["occupied"]:
-		var fan_pid = slots["case_fan"].get("part_id", "")
-		if fan_pid and parts.has(fan_pid):
-			parts[fan_pid].rotate_z(delta * 16.0)
+	# Анимация кулеров при работе ПК
+	if boot_mgr:
+		boot_mgr.animate_fans(delta)
 
 	# Скрытие сообщения
 	if message_timer > 0:
@@ -1384,213 +1385,22 @@ func toggle_case_lid():
 	if world_builder: world_builder.toggle_case_lid()
 
 # ============================================
-# ВКЛЮЧЕНИЕ ПК
+# ВКЛЮЧЕНИЕ И ДИАГНОСТИКА ПК (ДЕЛЕГИРОВАНО В BOOT_MANAGER)
 # ============================================
 func try_boot_pc():
-	if is_booting: return
-
-	# 0a. Проверка: Подключение сетевого силового кабеля 220V к БП
-	if not psu_cable_plugged:
-		show_error("ОШИБКА: Компьютер не подключён к сети 220V!\nОшибка начинающих: забыли вставить силовой кабель IEC C13 в розетку БП сзади корпуса.\nПодойдите к задней панели БП и нажмите [E], чтобы подключить провод!")
-		play_error_sound()
-		is_booting = false
-		return
-
-	# 0b. Проверка: Клавишный тумблер I/O на БП
-	if not psu_switch_on:
-		show_error("ОШИБКА: Тумблер блока питания выключен [0]!\nКлассическая ошибка: на задней стенке БП клавиша I/O стоит в положении [0]. Без неё дежурная линия +5VSB разомкнута.\nПереключите тумблер на задней панели БП в положение [I] (Вкл)!")
-		play_error_sound()
-		is_booting = false
-		return
-
-	# 0c. Проверка: Кабель HDMI от видеокарты к монитору
-	if not hdmi_cable_connected:
-		show_error("НЕТ СИГНАЛА НА МОНИТОРЕ (NO SIGNAL)!\nКабель HDMI не подключен между видеокартой и монитором.\nПодключите кабель HDMI на столе ([E] или [ЛКМ]), чтобы передать картинку на монитор!")
-		play_error_sound()
-		is_booting = false
-		return
-
-	# 0d. Проверка: Загрузочная флешка с Windows 11
-	if not usb_drive_plugged:
-		show_error("NO BOOTABLE DEVICE!\nНакопитель пуст, операционная система не найдена.\nВставьте загрузочную флешку с Windows 11 в USB-порт корпуса ПК ([E] на флешку на столе)!")
-		play_error_sound()
-		is_booting = false
-		return
-
-	# 1. Проверяем обязательные компоненты
-	var required = ["cpu", "ram1", "ram2", "gpu", "ssd"]
-	var missing_names = []
-	for r in required:
-		if not slots[r]["occupied"]:
-			missing_names.append(get_part_display_name(r))
-	if not slots["mb_slot"]["occupied"]:
-		missing_names.append("Материнская плата")
-
-	if missing_names.size() > 0:
-		show_error("Не установлены компоненты:\n" + "\n".join(missing_names))
-		play_error_sound()
-		is_booting = false
-		return
-
-	# 2. Проверка: материнка должна быть закреплена
-	if not mb_screwed and slots["mb_slot"]["occupied"]:
-		show_error("Материнская плата не закреплена! Возьмите отвёртку и закрутите 4 болта")
-		play_error_sound()
-		return
-
-	# 3. Проверяем подключение физических проводов питания
-	if not wire_done:
-		is_booting = false
-		show_message("Подключите кабели питания от БП к компонентам!")
-		start_wiring_mode()
-		return
-
-	# 4. Проверка: крышка должна быть закрыта (ПОСЛЕ подключения проводов!)
-	if case_lid_open:
-		show_error("Закройте боковую крышку перед включением (нажмите F)!")
-		play_error_sound()
-		return
-
-	is_booting = true
-	pc_booted = true
-	boot_sequence()
+	if boot_mgr: boot_mgr.try_boot_pc()
 
 func boot_sequence():
-	play_relay_sound(true)  # Щелчок силового реле БП при подаче питания
-	start_pc_fan_ambient()  # Звук работающего ПК (гул вентиляторов и воздуха)
-	play_boot_sound()
-	show_message("Реле БП замкнуто (CLACK)! Дежурное питание подано... POST тест...")
-	play_beep_sound()
-	if windows_sim:
-		var cpu_name_str = parts["cpu"].get_meta("name") if parts.has("cpu") else "Intel Core i7"
-		var gpu_name_str = parts["gpu"].get_meta("name") if parts.has("gpu") else "NVIDIA RTX 4070 Ti"
-		var ssd_name_str = parts["ssd"].get_meta("name") if parts.has("ssd") else "1TB NVMe SSD"
-		windows_sim.set_hardware_info(cpu_name_str, gpu_name_str, "32GB DDR5-5600", ssd_name_str)
-
-	if not hdmi_cable_connected:
-		set_monitor_screen_no_signal()
-	else:
-		set_monitor_screen_bios(["ASUS UEFI BIOS POST: Проверка компонентов..."])
-
-	# 1. ДЕМОНСТРАЦИЯ ОШИБКИ: Запуск БЕЗ КУЛЕРА CPU!
-	if not slots["cooler"]["occupied"]:
-		await get_tree().create_timer(1.2).timeout
-		play_error_sound()
-		play_beep_sound()
-		flash_screen(Color(1.0, 0.15, 0.0))
-		if hdmi_cable_connected and windows_sim:
-			windows_sim.show_alert("no_cooler")
-		show_error("КРИТИЧЕСКИЙ ПЕРЕГРЕВ CPU (105°C)!\nКулер не был установлен! Температура ядра подскочила за 2 секунды.\nСработала аварийная термозащита (Thermal Shutdown). ПК экстренно выключен!")
-		score = max(0, score - 25)
-		update_score_display()
-		add_mistake()
-		stop_pc_fan_ambient()
-		play_relay_sound(false)  # Щелчок реле при аварийном отключении
-		await get_tree().create_timer(4.0).timeout
-		pc_booted = false
-		is_booting = false
-		set_monitor_screen_off()
-		return
-
-	# 2. ДЕМОНСТРАЦИЯ ОШИБКИ: Запуск БЕЗ ТЕРМОПАСТЫ!
-	if not thermal_paste_applied and slots["cpu"]["occupied"]:
-		await get_tree().create_timer(1.6).timeout
-		play_error_sound()
-		play_beep_sound()
-		flash_screen(Color(1.0, 0.35, 0.0))
-		if hdmi_cable_connected and windows_sim:
-			windows_sim.show_alert("no_paste")
-		show_error("ПЕРЕГРЕВ CPU (100°C)! Кулер установлен, но НЕТ ТЕРМОПАСТЫ!\nВоздушный зазор между CPU и кулером не отводит тепло.\nТроттлинг 100% -> Аварийное отключение!")
-		score = max(0, score - 20)
-		update_score_display()
-		add_mistake()
-		stop_pc_fan_ambient()
-		play_relay_sound(false)  # Щелчок реле при аварийном отключении
-		await get_tree().create_timer(4.0).timeout
-		pc_booted = false
-		is_booting = false
-		set_monitor_screen_off()
-		return
-
-	play_beep_sound()
-	await get_tree().create_timer(0.8).timeout
-	if not pc_booted:
-		set_monitor_screen_off()
-		is_booting = false
-		return
-	# BIOS экран
-	show_message("BIOS/UEFI: ASUS Z790-P  •  Version 2.15.1234")
-	if hdmi_cable_connected:
-		set_monitor_screen_bios([
-			"BIOS/UEFI: ASUS TUF GAMING Z790-PLUS  |  Версия 2.15.1234",
-			"CPU: " + parts["cpu"].get_meta("name") + " @ 3500 MHz (Температура: 34 C)",
-			"RAM: 32GB DDR5-5600  |  Двухканальный режим (Dual Channel OK)",
-			"GPU: " + parts["gpu"].get_meta("name") + "  |  12GB GDDR6X (PCIe 4.0 x16 OK)",
-			"SSD: " + parts["ssd"].get_meta("name") + "  |  NVMe PCIe 4.0 x4 (1000 GB OK)",
-			"USB: Загрузочная флешка Windows 11 (UEFI Boot OK)"
-		])
-	await get_tree().create_timer(1.0).timeout
-	if not pc_booted:
-		set_monitor_screen_off()
-		is_booting = false
-		return
-	show_message("CPU: " + parts["cpu"].get_meta("name") + " @ 3500 MHz")
-	await get_tree().create_timer(0.65).timeout
-	if not pc_booted:
-		set_monitor_screen_off()
-		is_booting = false
-		return
-	show_message("RAM: 32GB DDR5-5600  |  Двухканальный режим")
-	await get_tree().create_timer(0.65).timeout
-	if not pc_booted:
-		set_monitor_screen_off()
-		is_booting = false
-		return
-	show_message("GPU: " + parts["gpu"].get_meta("name") + "  |  12GB GDDR6X")
-	await get_tree().create_timer(0.65).timeout
-	if not pc_booted:
-		set_monitor_screen_off()
-		is_booting = false
-		return
-	show_message("SSD: " + parts["ssd"].get_meta("name") + "  |  NVMe PCIe 4.0")
-	await get_tree().create_timer(0.65).timeout
-	if not pc_booted:
-		set_monitor_screen_off()
-		is_booting = false
-		return
-	# Запуск: сначала показываем Рикролл на мониторе, затем мастер установки Windows 11 на мониторе!
-	if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "power_button":
-		advance_guided_step()
-
-	if windows_sim:
-		windows_sim.start_boot_sequence()
+	if boot_mgr: boot_mgr.boot_sequence()
 
 func _on_windows_installation_finished():
-	windows_installed = true
-	timer_active = false
-	build_end_time = Time.get_ticks_msec()
-	var elapsed = (build_end_time - build_start_time) / 1000.0
-	is_booting = false
-	if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "windows_install":
-		advance_guided_step()
-	if current_mode == "speedrun":
-		show_speedrun_victory_podium(elapsed)
-	elif current_mode == "guided":
-		show_certificate(elapsed)
-	else:
-		show_message("ПК работает! Поздравляем, %s! Windows 11 успешно установлена! (F5 — перезапуск)" % player_name)
+	if boot_mgr: boot_mgr.on_windows_installation_finished()
 
 func _on_windows_os_crashed(_reason: String):
 	pass
 
 func flash_screen(color: Color):
-	if not monitor_screen: return
-	var mat = monitor_screen.get_surface_override_material(0)
-	var original = mat.albedo_color
-	var tween = create_tween()
-	for _i in range(4):
-		tween.tween_property(mat, "albedo_color", color, 0.12)
-		tween.tween_property(mat, "albedo_color", original, 0.12)
+	if boot_mgr: boot_mgr.flash_screen(color)
 
 func update_score_display():
 	if score_label:
