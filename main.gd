@@ -132,6 +132,7 @@ var hdmi_line_root: Node3D = null
 var usb_drive_plugged = false         # Вставлена ли флешка в ПК
 var usb_flash_node: Node3D = null
 var usb_front_plugged_node: Node3D = null
+var usb_led_tween: Tween = null
 var windows_installed = false         # Установлена ли ОС Windows
 var is_installing_windows: bool:
 	get:
@@ -736,20 +737,6 @@ func build_pc_case():
 	power_btn_body.position = Vector3(0.18, 0.17, -0.245)
 	pc_case.add_child(power_btn_body)
 
-	# Дублирующая кнопка питания на передней грани (прямо перед игроком)
-	make_box_on(pc_case, Vector3(0.016, 0.04, 0.04), Vector3(0.246, 0.22, 0.18), Color(0.1, 0.7, 0.3))
-	make_box_on(pc_case, Vector3(0.016, 0.012, 0.012), Vector3(0.246, 0.22, 0.13), Color(0.1, 0.3, 1.0))
-	var power_btn2_body = StaticBody3D.new()
-	power_btn2_body.name = "PowerButtonBody"
-	var power_btn2_col = CollisionShape3D.new()
-	var power_btn2_shape = BoxShape3D.new()
-	power_btn2_shape.size = Vector3(0.08, 0.08, 0.08)
-	power_btn2_col.shape = power_btn2_shape
-	power_btn2_body.add_child(power_btn2_col)
-	power_btn2_body.position = Vector3(0.246, 0.22, 0.18)
-	power_btn2_body.collision_layer = 2
-	power_btn2_body.collision_mask = 0
-	pc_case.add_child(power_btn2_body)
 
 	create_slot("mb_slot", Vector3(-0.18, 0.045, 0), Vector3(0.02, 0.35, 0.35), "motherboard")
 	create_slot("case_fan", Vector3(-0.16, 0.12, -0.23), Vector3(0.12, 0.12, 0.02), "case_fan")
@@ -2609,7 +2596,7 @@ func try_pickup() -> bool:
 				elif next == "hdmi":
 					show_error("Сейчас нужно подключить кабель HDMI от видеокарты к монитору")
 				elif next == "usb_drive":
-					show_error("Сейчас нужно вставить флешку с Windows в USB-порт корпуса")
+					show_error("Сейчас нужно вставить флешку с Windows в USB-порт на задней панели ПК")
 				elif next == "psu_cable":
 					show_error("Сейчас нужно подключить силовой кабель 220V к БП")
 				elif next == "psu_switch":
@@ -2644,7 +2631,7 @@ func get_part_display_name(id) -> String:
 		"wiring":        "Кабели питания БП (подключить разъёмы к плате)",
 		"case_lid":      "Боковая крышка корпуса (нажмите F, чтобы закрыть)",
 		"hdmi":          "Кабель HDMI (подключить от видеокарты к монитору)",
-		"usb_drive":     "Флешка Windows 11 (вставить в USB-порт корпуса ПК)",
+		"usb_drive":     "Флешка Windows 11 (вставить в USB-порт на задней панели ПК)",
 		"psu_cable":     "Сетевой кабель 220V (подключить штекер C13 к БП)",
 		"psu_switch":    "Тумблер БП (нажмите P для переключения в положение [I])",
 		"power_button":  "Кнопка питания ПК (нажмите Power SW или Space для старта)",
@@ -4867,7 +4854,7 @@ func build_hdmi_system():
 	# 2. Порт HDMI на задней стенке корпуса ПК (на уровне планки GPU)
 	var gpu_port = Node3D.new()
 	gpu_port.name = "GPUHDMIPort"
-	gpu_port.position = Vector3(-0.04, 0.08, -0.245)
+	gpu_port.position = Vector3(-0.04, 0.08, 0.245)
 	pc_case.add_child(gpu_port)
 	make_box_on(gpu_port, Vector3(0.035, 0.020, 0.008), Vector3.ZERO, Color(0.85, 0.72, 0.2))
 	make_box_on(gpu_port, Vector3(0.020, 0.010, 0.010), Vector3.ZERO, Color(0.06, 0.06, 0.08))
@@ -4876,8 +4863,9 @@ func build_hdmi_system():
 	gp_body.name = "GPUHDMIPortBody"
 	var gp_col = CollisionShape3D.new()
 	var gp_shape = BoxShape3D.new()
-	gp_shape.size = Vector3(0.12, 0.12, 0.10)
+	gp_shape.size = Vector3(0.04, 0.025, 0.02)
 	gp_col.shape = gp_shape
+	gp_col.position = Vector3(0, 0, 0.01)
 	gp_body.add_child(gp_col)
 	gp_body.collision_layer = 2
 	gp_body.collision_mask = 0
@@ -4967,7 +4955,7 @@ func _update_hdmi_visual():
 # ============================================================
 func _is_usb_interactable(collider) -> bool:
 	if not collider: return false
-	var names = ["USBDriveBody", "PCUSBPortBody"]
+	var names = ["USBDriveBody", "PCUSBPortBody", "USBFrontPluggedBody"]
 	if collider.name in names: return true
 	if collider.get_parent() and collider.get_parent().name in names: return true
 	return false
@@ -5004,19 +4992,20 @@ func build_usb_flash_drive():
 	u_body.collision_mask = 0
 	usb_flash_node.add_child(u_body)
 
-	# 2. USB-порт на лицевой панели корпуса ПК
+	# 2. USB-порт на задней панели корпуса ПК (I/O матплаты)
 	var usb_port = Node3D.new()
 	usb_port.name = "PCUSBPort"
-	usb_port.position = Vector3(0.246, 0.17, 0.10)
+	usb_port.position = Vector3(-0.04, 0.14, 0.245)
 	pc_case.add_child(usb_port)
-	make_box_on(usb_port, Vector3(0.006, 0.014, 0.026), Vector3.ZERO, Color(0.12, 0.50, 0.95))
+	make_box_on(usb_port, Vector3(0.026, 0.014, 0.006), Vector3.ZERO, Color(0.12, 0.50, 0.95))
 
 	var up_body = StaticBody3D.new()
 	up_body.name = "PCUSBPortBody"
 	var up_col = CollisionShape3D.new()
 	var up_shape = BoxShape3D.new()
-	up_shape.size = Vector3(0.10, 0.10, 0.12)
+	up_shape.size = Vector3(0.04, 0.025, 0.02)
 	up_col.shape = up_shape
+	up_col.position = Vector3(0, 0, 0.01)
 	up_body.add_child(up_col)
 	up_body.collision_layer = 2
 	up_body.collision_mask = 0
@@ -5033,6 +5022,10 @@ func toggle_usb_drive():
 	usb_drive_plugged = not usb_drive_plugged
 	play_click_sound()
 
+	if usb_led_tween and is_instance_valid(usb_led_tween):
+		usb_led_tween.kill()
+		usb_led_tween = null
+
 	if usb_flash_node and is_instance_valid(usb_flash_node):
 		usb_flash_node.visible = not usb_drive_plugged
 
@@ -5043,16 +5036,29 @@ func toggle_usb_drive():
 	if usb_drive_plugged:
 		usb_front_plugged_node = Node3D.new()
 		usb_front_plugged_node.name = "USBFrontPlugged"
-		usb_front_plugged_node.position = Vector3(0.275, 0.17, 0.10)
+		usb_front_plugged_node.position = Vector3(-0.04, 0.14, 0.275)
 		pc_case.add_child(usb_front_plugged_node)
-		make_box_on(usb_front_plugged_node, Vector3(0.060, 0.012, 0.024), Vector3.ZERO, Color(0.85, 0.20, 0.20))
+		make_box_on(usb_front_plugged_node, Vector3(0.024, 0.012, 0.060), Vector3.ZERO, Color(0.85, 0.20, 0.20))
 		# Мигающий светодиод активности
-		var led = make_box_on(usb_front_plugged_node, Vector3(0.006, 0.006, 0.006), Vector3(0.02, 0.008, 0), Color(0.2, 0.8, 1.0))
-		var tw = create_tween().set_loops()
-		tw.tween_property(led, "visible", false, 0.15)
-		tw.tween_property(led, "visible", true, 0.15)
+		var led = make_box_on(usb_front_plugged_node, Vector3(0.006, 0.006, 0.006), Vector3(0, 0.008, 0.018), Color(0.2, 0.8, 1.0))
+		usb_led_tween = usb_front_plugged_node.create_tween().set_loops()
+		usb_led_tween.tween_callback(func(): if is_instance_valid(led): led.visible = false)
+		usb_led_tween.tween_interval(0.18)
+		usb_led_tween.tween_callback(func(): if is_instance_valid(led): led.visible = true)
+		usb_led_tween.tween_interval(0.18)
 
-		show_message("Загрузочная флешка Windows 11 вставлена в USB-порт корпуса!")
+		var plug_body = StaticBody3D.new()
+		plug_body.name = "USBFrontPluggedBody"
+		var plug_col = CollisionShape3D.new()
+		var plug_shape = BoxShape3D.new()
+		plug_shape.size = Vector3(0.03, 0.02, 0.06)
+		plug_col.shape = plug_shape
+		plug_body.add_child(plug_col)
+		plug_body.collision_layer = 2
+		plug_body.collision_mask = 0
+		usb_front_plugged_node.add_child(plug_body)
+
+		show_message("Загрузочная флешка Windows 11 вставлена в USB-порт на задней панели ПК!")
 		if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "usb_drive":
 			advance_guided_step()
 	else:
