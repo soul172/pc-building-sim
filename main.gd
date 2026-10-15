@@ -182,17 +182,28 @@ var tip_visible = false
 var tip_display_timer = 0.0
 
 # ============================================
-# ГЛОССАРИЙ
+# ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ДЕЛЕГИРОВАНО В GLOSSARY_UI)
 # ============================================
-var glossary_panel: Control = null
-var glossary_canvas: CanvasLayer = null
-var glossary_open = false
-var current_guide_tab = "glossary"
-var glossary_scroll: ScrollContainer = null
-var mistakes_scroll: ScrollContainer = null
-var tab_glossary_btn: Button = null
-var tab_mistakes_btn: Button = null
-var guide_subtitle_lbl: Label = null
+const GlossaryUIScript = preload("res://scripts/ui/glossary_ui.gd")
+var glossary_ui = null
+
+var glossary_open: bool:
+	get: return glossary_ui.is_open if glossary_ui else false
+	set(val):
+		if glossary_ui:
+			if val: glossary_ui.open()
+			else: glossary_ui.close()
+
+var current_guide_tab: String:
+	get: return glossary_ui.current_tab if glossary_ui else "glossary"
+	set(val):
+		if glossary_ui: glossary_ui.current_tab = val
+
+var glossary_panel: Control:
+	get: return glossary_ui.glossary_panel if glossary_ui else null
+
+var glossary_canvas: CanvasLayer:
+	get: return glossary_ui
 
 # ============================================
 # ПАСХАЛКА
@@ -1629,396 +1640,42 @@ func build_tip_panel():
 	hbox.add_child(tip_label)
 
 # ============================================
-# ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ПОЛНОЭКРАННЫЙ РЕЖИМ)
+# ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ДЕЛЕГИРОВАНО В GLOSSARY_UI)
 # ============================================
 func build_glossary_panel():
-	var old_canvas = get_node_or_null("GlossaryCanvas")
-	if old_canvas: old_canvas.queue_free()
-
-	glossary_canvas = CanvasLayer.new()
-	glossary_canvas.name = "GlossaryCanvas"
-	glossary_canvas.layer = 45
-	add_child(glossary_canvas)
-
-	glossary_panel = Control.new()
-	glossary_panel.name = "GlossaryPanel"
-	glossary_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	glossary_canvas.add_child(glossary_panel)
-	glossary_panel.visible = false
-
-	# Тёмный полноэкранный кибер-фон
-	var bg = ColorRect.new()
-	bg.color = Color(0.04, 0.05, 0.09, 0.96)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	glossary_panel.add_child(bg)
-
-	# Неоновая акцентная полоса сверху
-	var top_glow = ColorRect.new()
-	top_glow.color = Color(0.15, 0.65, 1.0, 0.85)
-	top_glow.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_glow.custom_minimum_size = Vector2(0, 3)
-	glossary_panel.add_child(top_glow)
-
-	# Главный контейнер на весь экран с отступами
-	var margin = MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.add_theme_constant_override("margin_left", 32)
-	margin.add_theme_constant_override("margin_right", 32)
-	margin.add_theme_constant_override("margin_top", 20)
-	margin.add_theme_constant_override("margin_bottom", 20)
-	glossary_panel.add_child(margin)
-
-	var card = PanelContainer.new()
-	var card_sb = StyleBoxFlat.new()
-	card_sb.bg_color = Color(0.06, 0.09, 0.15, 0.95)
-	card_sb.corner_radius_top_left = 16
-	card_sb.corner_radius_top_right = 16
-	card_sb.corner_radius_bottom_left = 16
-	card_sb.corner_radius_bottom_right = 16
-	card_sb.border_width_left = 2
-	card_sb.border_width_right = 2
-	card_sb.border_width_top = 2
-	card_sb.border_width_bottom = 2
-	card_sb.border_color = Color(0.20, 0.42, 0.68, 0.8)
-	card_sb.content_margin_left = 24
-	card_sb.content_margin_right = 24
-	card_sb.content_margin_top = 16
-	card_sb.content_margin_bottom = 16
-	card.add_theme_stylebox_override("panel", card_sb)
-	margin.add_child(card)
-
-	var main_vbox = VBoxContainer.new()
-	main_vbox.add_theme_constant_override("separation", 10)
-	card.add_child(main_vbox)
-
-	# Верхняя полоса: Заголовок + Табы + Закрыть
-	var top_bar = HBoxContainer.new()
-	top_bar.add_theme_constant_override("separation", 16)
-	main_vbox.add_child(top_bar)
-
-	var title_vbox = VBoxContainer.new()
-	title_vbox.add_theme_constant_override("separation", 2)
-	title_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	top_bar.add_child(title_vbox)
-
-	var badge = Label.new()
-	badge.text = "БАЗА ЗНАНИЙ И РУКОВОДСТВО СБОРЩИКА"
-	badge.add_theme_font_size_override("font_size", 11)
-	badge.add_theme_color_override("font_color", Color(0.3, 0.85, 1.0))
-	title_vbox.add_child(badge)
-
-	var title_lbl = Label.new()
-	title_lbl.text = "ИНТЕРАКТИВНЫЙ СПРАВОЧНИК ПК"
-	title_lbl.add_theme_font_size_override("font_size", 22)
-	title_lbl.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0))
-	title_lbl.add_theme_constant_override("outline_size", 3)
-	title_lbl.add_theme_color_override("font_outline_color", Color(0.04, 0.18, 0.38, 1.0))
-	title_vbox.add_child(title_lbl)
-
-	# Вкладки
-	var tabs_box = HBoxContainer.new()
-	tabs_box.add_theme_constant_override("separation", 10)
-	top_bar.add_child(tabs_box)
-
-	tab_glossary_btn = Button.new()
-	tab_glossary_btn.text = "Глоссарий терминов (G)"
-	tab_glossary_btn.custom_minimum_size = Vector2(230, 40)
-	tab_glossary_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	tab_glossary_btn.add_theme_font_size_override("font_size", 14)
-	tab_glossary_btn.pressed.connect(func(): switch_guide_tab("glossary"))
-	tabs_box.add_child(tab_glossary_btn)
-
-	tab_mistakes_btn = Button.new()
-	tab_mistakes_btn.text = "Частые ошибки сборки (H)"
-	tab_mistakes_btn.custom_minimum_size = Vector2(240, 40)
-	tab_mistakes_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	tab_mistakes_btn.add_theme_font_size_override("font_size", 14)
-	tab_mistakes_btn.pressed.connect(func(): switch_guide_tab("mistakes"))
-	tabs_box.add_child(tab_mistakes_btn)
-
-	var close_btn = Button.new()
-	close_btn.text = "Закрыть (ESC)"
-	close_btn.custom_minimum_size = Vector2(140, 40)
-	close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	close_btn.add_theme_font_size_override("font_size", 14)
-	var close_sb = StyleBoxFlat.new()
-	close_sb.bg_color = Color(0.18, 0.08, 0.08, 0.85)
-	close_sb.border_width_left = 1
-	close_sb.border_width_right = 1
-	close_sb.border_width_top = 1
-	close_sb.border_width_bottom = 1
-	close_sb.border_color = Color(0.85, 0.30, 0.25, 0.7)
-	close_sb.corner_radius_top_left = 8
-	close_sb.corner_radius_top_right = 8
-	close_sb.corner_radius_bottom_left = 8
-	close_sb.corner_radius_bottom_right = 8
-	close_btn.add_theme_stylebox_override("normal", close_sb)
-	close_btn.pressed.connect(func(): close_glossary())
-	top_bar.add_child(close_btn)
-
-	# Разделитель
-	var sep = ColorRect.new()
-	sep.custom_minimum_size = Vector2(0, 2)
-	sep.color = Color(0.18, 0.32, 0.50, 0.6)
-	main_vbox.add_child(sep)
-
-	# Подзаголовок-описание выбранной вкладки
-	guide_subtitle_lbl = Label.new()
-	guide_subtitle_lbl.add_theme_font_size_override("font_size", 13)
-	guide_subtitle_lbl.add_theme_color_override("font_color", Color(0.65, 0.78, 0.95))
-	main_vbox.add_child(guide_subtitle_lbl)
-
-	# Контейнер для списков
-	var content_panel = PanelContainer.new()
-	content_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	var cont_sb = StyleBoxFlat.new()
-	cont_sb.bg_color = Color(0.04, 0.06, 0.11, 0.7)
-	cont_sb.corner_radius_top_left = 10
-	cont_sb.corner_radius_top_right = 10
-	cont_sb.corner_radius_bottom_left = 10
-	cont_sb.corner_radius_bottom_right = 10
-	cont_sb.border_width_left = 1
-	cont_sb.border_width_right = 1
-	cont_sb.border_width_top = 1
-	cont_sb.border_width_bottom = 1
-	cont_sb.border_color = Color(0.15, 0.24, 0.38, 0.6)
-	cont_sb.content_margin_left = 14
-	cont_sb.content_margin_right = 14
-	cont_sb.content_margin_top = 10
-	cont_sb.content_margin_bottom = 10
-	content_panel.add_theme_stylebox_override("panel", cont_sb)
-	main_vbox.add_child(content_panel)
-
-	# 1. SCROLL ДЛЯ ГЛОССАРИЯ
-	glossary_scroll = ScrollContainer.new()
-	glossary_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	glossary_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	glossary_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	glossary_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	content_panel.add_child(glossary_scroll)
-
-	var g_vbox = VBoxContainer.new()
-	g_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	g_vbox.add_theme_constant_override("separation", 10)
-	glossary_scroll.add_child(g_vbox)
-
-	for term in GameDatabase.GLOSSARY:
-		var term_card = PanelContainer.new()
-		term_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var t_sb = StyleBoxFlat.new()
-		t_sb.bg_color = Color(0.08, 0.11, 0.18, 0.85)
-		t_sb.corner_radius_top_left = 8
-		t_sb.corner_radius_top_right = 8
-		t_sb.corner_radius_bottom_left = 8
-		t_sb.corner_radius_bottom_right = 8
-		t_sb.border_width_left = 1
-		t_sb.border_width_right = 1
-		t_sb.border_width_top = 1
-		t_sb.border_width_bottom = 1
-		t_sb.border_color = Color(0.18, 0.30, 0.48, 0.5)
-		t_sb.content_margin_left = 16
-		t_sb.content_margin_right = 16
-		t_sb.content_margin_top = 10
-		t_sb.content_margin_bottom = 10
-		term_card.add_theme_stylebox_override("panel", t_sb)
-		g_vbox.add_child(term_card)
-
-		var t_box = VBoxContainer.new()
-		t_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		t_box.add_theme_constant_override("separation", 4)
-		term_card.add_child(t_box)
-
-		var term_name = Label.new()
-		term_name.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		term_name.text = term
-		term_name.add_theme_font_size_override("font_size", 16)
-		term_name.add_theme_color_override("font_color", Color(0.35, 0.90, 0.65))
-		t_box.add_child(term_name)
-
-		var term_def = Label.new()
-		term_def.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		term_def.text = GameDatabase.GLOSSARY[term]
-		term_def.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		term_def.add_theme_font_size_override("font_size", 13)
-		term_def.add_theme_color_override("font_color", Color(0.85, 0.90, 0.98))
-		t_box.add_child(term_def)
-
-	# 2. SCROLL ДЛЯ ЧАСТЫХ ОШИБОК
-	mistakes_scroll = ScrollContainer.new()
-	mistakes_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	mistakes_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mistakes_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	mistakes_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	mistakes_scroll.visible = false
-	content_panel.add_child(mistakes_scroll)
-
-	var m_vbox = VBoxContainer.new()
-	m_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	m_vbox.add_theme_constant_override("separation", 12)
-	mistakes_scroll.add_child(m_vbox)
-
-	var m_idx = 1
-	for m in GameDatabase.COMMON_MISTAKES:
-		var m_card = PanelContainer.new()
-		m_card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		var m_sb = StyleBoxFlat.new()
-		m_sb.bg_color = Color(0.08, 0.11, 0.19, 0.9)
-		m_sb.corner_radius_top_left = 10
-		m_sb.corner_radius_top_right = 10
-		m_sb.corner_radius_bottom_left = 10
-		m_sb.corner_radius_bottom_right = 10
-		m_sb.border_width_left = 1
-		m_sb.border_width_right = 1
-		m_sb.border_width_top = 1
-		m_sb.border_width_bottom = 1
-		var is_crit = (m["severity"] == "КРИТИЧЕСКАЯ")
-		m_sb.border_color = Color(0.85, 0.30, 0.25, 0.6) if is_crit else Color(0.85, 0.65, 0.20, 0.6)
-		m_sb.content_margin_left = 18
-		m_sb.content_margin_right = 18
-		m_sb.content_margin_top = 12
-		m_sb.content_margin_bottom = 12
-		m_card.add_theme_stylebox_override("panel", m_sb)
-		m_vbox.add_child(m_card)
-
-		var m_box = VBoxContainer.new()
-		m_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m_box.add_theme_constant_override("separation", 6)
-		m_card.add_child(m_box)
-
-		var header_row = HBoxContainer.new()
-		header_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m_box.add_child(header_row)
-
-		var m_title = Label.new()
-		m_title.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		m_title.text = "%d. %s" % [m_idx, m["title"]]
-		m_title.add_theme_font_size_override("font_size", 16)
-		m_title.add_theme_color_override("font_color", Color(1.0, 0.95, 0.95))
-		header_row.add_child(m_title)
-
-		var sev_lbl = Label.new()
-		sev_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		sev_lbl.text = "[ %s ]" % m["severity"]
-		sev_lbl.add_theme_font_size_override("font_size", 12)
-		sev_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4) if is_crit else Color(1.0, 0.75, 0.3))
-		header_row.add_child(sev_lbl)
-
-		var m_desc = Label.new()
-		m_desc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m_desc.text = "• Суть ошибки: " + m["desc"]
-		m_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		m_desc.add_theme_font_size_override("font_size", 13)
-		m_desc.add_theme_color_override("font_color", Color(0.80, 0.85, 0.95))
-		m_box.add_child(m_desc)
-
-		var m_sym = Label.new()
-		m_sym.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m_sym.text = "• Симптомы: " + m["symptom"]
-		m_sym.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		m_sym.add_theme_font_size_override("font_size", 13)
-		m_sym.add_theme_color_override("font_color", Color(1.0, 0.70, 0.50))
-		m_box.add_child(m_sym)
-
-		var m_sol = Label.new()
-		m_sol.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		m_sol.text = "• Как избежать / исправить: " + m["solution"]
-		m_sol.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		m_sol.add_theme_font_size_override("font_size", 13)
-		m_sol.add_theme_color_override("font_color", Color(0.35, 0.95, 0.60))
-		m_box.add_child(m_sol)
-
-		m_idx += 1
-
-	var bottom_hint = Label.new()
-	bottom_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	bottom_hint.text = "Колёсико мыши / Стрелки Вверх/Вниз / PageUp / PageDown — прокрутка  |  G — глоссарий  |  H — частые ошибки  |  ESC — закрыть"
-	bottom_hint.add_theme_font_size_override("font_size", 12)
-	bottom_hint.add_theme_color_override("font_color", Color(0.45, 0.58, 0.75))
-	main_vbox.add_child(bottom_hint)
-
-	switch_guide_tab("glossary")
-
-func switch_guide_tab(tab_name: String):
-	current_guide_tab = tab_name
-	if not glossary_scroll or not mistakes_scroll: return
-
-	var active_sb = StyleBoxFlat.new()
-	active_sb.bg_color = Color(0.12, 0.28, 0.48, 1.0)
-	active_sb.border_width_left = 2
-	active_sb.border_width_right = 2
-	active_sb.border_width_top = 2
-	active_sb.border_width_bottom = 2
-	active_sb.border_color = Color(0.35, 0.85, 1.0, 0.9)
-	active_sb.corner_radius_top_left = 8
-	active_sb.corner_radius_top_right = 8
-	active_sb.corner_radius_bottom_left = 8
-	active_sb.corner_radius_bottom_right = 8
-
-	var inactive_sb = StyleBoxFlat.new()
-	inactive_sb.bg_color = Color(0.08, 0.12, 0.20, 0.8)
-	inactive_sb.border_width_left = 1
-	inactive_sb.border_width_right = 1
-	inactive_sb.border_width_top = 1
-	inactive_sb.border_width_bottom = 1
-	inactive_sb.border_color = Color(0.20, 0.32, 0.48, 0.6)
-	inactive_sb.corner_radius_top_left = 8
-	inactive_sb.corner_radius_top_right = 8
-	inactive_sb.corner_radius_bottom_left = 8
-	inactive_sb.corner_radius_bottom_right = 8
-
-	if tab_name == "glossary":
-		glossary_scroll.visible = true
-		mistakes_scroll.visible = false
-		if tab_glossary_btn:
-			tab_glossary_btn.add_theme_stylebox_override("normal", active_sb)
-			tab_glossary_btn.add_theme_color_override("font_color", Color.WHITE)
-		if tab_mistakes_btn:
-			tab_mistakes_btn.add_theme_stylebox_override("normal", inactive_sb)
-			tab_mistakes_btn.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-		if guide_subtitle_lbl:
-			guide_subtitle_lbl.text = "ГЛОССАРИЙ: Ключевые термины архитектуры ПК, сокеты, протоколы шин и типы памяти."
-	else:
-		glossary_scroll.visible = false
-		mistakes_scroll.visible = true
-		if tab_glossary_btn:
-			tab_glossary_btn.add_theme_stylebox_override("normal", inactive_sb)
-			tab_glossary_btn.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
-		if tab_mistakes_btn:
-			tab_mistakes_btn.add_theme_stylebox_override("normal", active_sb)
-			tab_mistakes_btn.add_theme_color_override("font_color", Color.WHITE)
-		if guide_subtitle_lbl:
-			guide_subtitle_lbl.text = "ЧАСТЫЕ ОШИБКИ: 12 самых опасных и распространённых ошибок при сборке ПК и способы их решения."
-	play_click_sound()
+	if not glossary_ui or not is_instance_valid(glossary_ui):
+		var old = get_node_or_null("GlossaryCanvas")
+		if old: old.queue_free()
+		glossary_ui = GlossaryUIScript.new()
+		add_child(glossary_ui)
+		glossary_ui.closed.connect(_on_glossary_closed)
 
 func open_glossary(tab: String = "glossary"):
-	if not glossary_panel or not is_instance_valid(glossary_panel):
+	if not glossary_ui or not is_instance_valid(glossary_ui):
 		build_glossary_panel()
-	switch_guide_tab(tab)
-	glossary_open = true
-	glossary_panel.visible = true
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	glossary_ui.open(tab)
 
 func close_glossary():
-	glossary_open = false
-	if glossary_panel and is_instance_valid(glossary_panel):
-		glossary_panel.visible = false
-	if not in_wiring_mode:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	if glossary_ui:
+		glossary_ui.close()
+	_on_glossary_closed()
 
 func toggle_glossary(tab: String = "glossary"):
-	if glossary_open:
-		if current_guide_tab == tab:
-			close_glossary()
-		else:
-			switch_guide_tab(tab)
-	else:
-		open_glossary(tab)
+	if not glossary_ui or not is_instance_valid(glossary_ui):
+		build_glossary_panel()
+	glossary_ui.toggle(tab)
+
+func switch_guide_tab(tab_name: String):
+	if glossary_ui:
+		glossary_ui.switch_tab(tab_name)
 
 func _scroll_guide(delta_y: int):
-	var active_scroll = mistakes_scroll if current_guide_tab == "mistakes" else glossary_scroll
-	if active_scroll and is_instance_valid(active_scroll):
-		active_scroll.scroll_vertical = max(0, active_scroll.scroll_vertical + delta_y)
+	if glossary_ui:
+		glossary_ui.scroll(delta_y)
+
+func _on_glossary_closed():
+	if not in_wiring_mode:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 # ============================================
 # HELPERS (make_box)
@@ -2142,32 +1799,8 @@ func _input(event):
 			activate_easter_egg()
 
 	if glossary_open:
-		if event is InputEventKey and event.pressed:
-			if event.keycode == KEY_G:
-				if current_guide_tab == "glossary":
-					close_glossary()
-				else:
-					switch_guide_tab("glossary")
-			elif event.keycode in [KEY_H, KEY_O]:
-				if current_guide_tab == "mistakes":
-					close_glossary()
-				else:
-					switch_guide_tab("mistakes")
-			elif event.keycode == KEY_ESCAPE:
-				close_glossary()
-			elif event.keycode == KEY_DOWN:
-				_scroll_guide(50)
-			elif event.keycode == KEY_UP:
-				_scroll_guide(-50)
-			elif event.keycode == KEY_PAGEDOWN:
-				_scroll_guide(250)
-			elif event.keycode == KEY_PAGEUP:
-				_scroll_guide(-250)
-		elif event is InputEventMouseButton and event.pressed:
-			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-				_scroll_guide(-70)
-			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-				_scroll_guide(70)
+		if glossary_ui and glossary_ui.handle_input(event):
+			return
 		return
 
 	if event is InputEventMouseMotion:
