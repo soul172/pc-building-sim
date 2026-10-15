@@ -135,6 +135,12 @@ var player_name = "Сборщик"
 const ToolsManagerScript = preload("res://scripts/managers/tools_manager.gd")
 var tools_mgr = null
 
+# ============================================
+# ДЕТАЛИ И СЛОТЫ (ДЕЛЕГИРОВАНО В PARTS_MANAGER)
+# ============================================
+const PartsManagerScript = preload("res://scripts/managers/parts_manager.gd")
+var parts_mgr = null
+
 var tool_held: String:
 	get: return tools_mgr.tool_held if tools_mgr else ""
 	set(val): if tools_mgr: tools_mgr.tool_held = val
@@ -403,6 +409,10 @@ func _ready():
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
 	add_child(tools_mgr)
+	parts_mgr = PartsManagerScript.new()
+	parts_mgr.name = "PartsManager"
+	parts_mgr.setup(self)
+	add_child(parts_mgr)
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -1461,20 +1471,7 @@ func drop_held_item():
 		return
 
 func rotate_held_part():
-	if not held_part: return
-	if held_part.get_meta("type") == "case_fan":
-		if case_fan_orientation == "exhaust":
-			case_fan_orientation = "intake"
-			held_part.rotate_y(PI)
-			show_message("Задний вентилятор: ВДУВ (внутрь) [Внимание]\nНажмите R ещё раз для переключения на ВЫДУВ наружу")
-		else:
-			case_fan_orientation = "exhaust"
-			held_part.rotate_y(PI)
-			show_message("Задний вентилятор: ВЫДУВ (наружу)\nПравильно! Горячий воздух отводится из корпуса.")
-		play_click_sound()
-	else:
-		held_part.rotate_y(PI / 2)
-		play_click_sound()
+	if parts_mgr: parts_mgr.rotate_held_part()
 
 func _process(delta):
 	if not game_started: return
@@ -1631,504 +1628,48 @@ func try_apply_thermal_paste():
 	if tools_mgr: tools_mgr.try_apply_thermal_paste()
 
 # ============================================
-# ПОДБОР ДЕТАЛЕЙ
+# ПОДБОР И УСТАНОВКА ДЕТАЛЕЙ (ДЕЛЕГИРОВАНО В PARTS_MANAGER)
 # ============================================
 func try_pickup() -> bool:
-	if not raycast.is_colliding(): return false
-	var collider = raycast.get_collider()
-	var hit_pos = raycast.get_collision_point()
-	var best_part = null
+	return parts_mgr.try_pickup() if parts_mgr else false
 
-	# Если материнская плата еще на столе и мы смотрим на неё или на любую установленную в неё деталь —
-	# цель подбора: ВСЯ материнская плата в сборе!
-	if not motherboard_installed and (collider == motherboard_node or (motherboard_node and motherboard_node.is_ancestor_of(collider))):
-		best_part = motherboard_node
+func get_part_display_name(id: String) -> String:
+	return parts_mgr.get_part_display_name(id) if parts_mgr else id
 
-	# 1. Прямой поиск детали по прицелу (если прицел ровно на детали)
-	if not best_part:
-		var direct_part = find_part_node(collider)
-		if direct_part and direct_part in parts.values():
-			var is_installed = false
-			for slot_id in slots:
-				if slots[slot_id]["occupied"] and slots[slot_id].get("part_id", "") == direct_part.get_meta("id", ""):
-					is_installed = true
-					break
-			if not is_installed:
-				best_part = direct_part
+func _set_part_colliders_enabled(node: Node, enabled: bool) -> void:
+	if parts_mgr: parts_mgr.set_part_colliders_enabled(node, enabled)
 
-	# 2. Если прямой прицел не дал свободную деталь, ищем ближайшую свободную к точке попадания
-	if not best_part:
-		var best_dist = 999.0
-		for id in parts:
-			var part = parts[id]
-			# Пропускаем установленные
-			var is_installed = false
-			for slot_id in slots:
-				if slots[slot_id]["occupied"] and slots[slot_id].get("part_id", "") == id:
-					is_installed = true
-					break
-			if is_installed: continue
-			var dist = hit_pos.distance_to(part.global_position)
-			if dist < best_dist and dist < 0.55:
-				best_dist = dist
-				best_part = part
-	if best_part:
-		# Проверка пошагового режима
-		if current_mode == "guided":
-			var next = guided_steps[current_step] if current_step < guided_steps.size() else ""
-			if best_part == motherboard_node:
-				# Материнскую плату на столе разрешаем брать всегда
-				pass
-			elif next in ["screwdriver", "thermal_paste", "wiring", "case_lid", "hdmi", "usb_drive", "psu_cable", "psu_switch", "power_button", "windows_install"]:
-				if next == "screwdriver":
-					show_error("Сейчас нужна отвёртка — подойдите к ней и нажмите E или ЛКМ")
-				elif next == "thermal_paste":
-					show_error("Сейчас нужна термопаста — подойдите к ней и нажмите E или ЛКМ")
-				elif next == "wiring":
-					show_error("Сейчас нужно подключить кабели питания БП к разъёмам платы")
-				elif next == "case_lid":
-					show_error("Сейчас нужно закрыть боковую крышку корпуса — нажмите F")
-				elif next == "hdmi":
-					show_error("Сейчас нужно подключить кабель HDMI от видеокарты к монитору")
-				elif next == "usb_drive":
-					show_error("Сейчас нужно вставить флешку с Windows в USB-порт на задней панели ПК")
-				elif next == "psu_cable":
-					show_error("Сейчас нужно подключить силовой кабель 220V к БП")
-				elif next == "psu_switch":
-					show_error("Сейчас нужно переключить тумблер БП в положение [I] (нажмите P)")
-				elif next == "power_button":
-					show_error("Сейчас нужно включить компьютер — нажмите Power SW или Space")
-				elif next == "windows_install":
-					show_error("Сейчас нужно установить Windows — следуйте инструкциям на экране")
-				add_mistake()
-				return true
-			elif best_part.get_meta("id") != next:
-				show_error("Сейчас нужно установить: " + get_part_display_name(next))
-				add_mistake()
-				return true
-		pick_up(best_part)
-		return true
+func pick_up(part: Node3D) -> void:
+	if parts_mgr: parts_mgr.pick_up(part)
 
-	return false
+func try_install() -> void:
+	if parts_mgr: parts_mgr.try_install()
 
-func get_part_display_name(id) -> String:
-	var names = {
-		"motherboard":   "Материнская плата (установить в корпус)",
-		"screwdriver":   "Отвёртка (закрепить материнку 4 винтами)",
-		"cpu":           "Процессор (CPU в сокет)",
-		"thermal_paste": "Термопаста (нанести на процессор)",
-		"cooler":        "Кулер процессора (установить на CPU)",
-		"ram1":          "Первая планка RAM (в слот A2)",
-		"ram2":          "Вторая планка RAM (в слот B2)",
-		"gpu":           "Видеокарта (в слот PCIe)",
-		"ssd":           "SSD накопитель (в слот M.2)",
-		"case_fan":      "Корпусной вентилятор 120mm (на выдув)",
-		"wiring":        "Кабели питания БП (подключить разъёмы к плате)",
-		"case_lid":      "Боковая крышка корпуса (нажмите F, чтобы закрыть)",
-		"hdmi":          "Кабель HDMI (подключить от видеокарты к монитору)",
-		"usb_drive":     "Флешка Windows 11 (вставить в USB-порт на задней панели ПК)",
-		"psu_cable":     "Сетевой кабель 220V (подключить штекер C13 к БП)",
-		"psu_switch":    "Тумблер БП (нажмите P для переключения в положение [I])",
-		"power_button":  "Кнопка питания ПК (нажмите Power SW или Space для старта)",
-		"windows_install": "Установка Windows 11 (следуйте мастеру на экране)"
-	}
-	return names.get(id, id)
+func install_part(slot_id: String) -> void:
+	if parts_mgr: parts_mgr.install_part(slot_id)
 
-func _set_part_colliders_enabled(node: Node, enabled: bool):
-	if not node or not is_instance_valid(node): return
-	if node is CollisionShape3D:
-		node.disabled = not enabled
-	for child in node.get_children():
-		_set_part_colliders_enabled(child, enabled)
-
-func pick_up(part):
-	held_part = part
-	_set_part_colliders_enabled(part, false)
-	part.reparent(camera)
-	part.position = Vector3(0.3, -0.28, -0.6)
-	part.rotation = Vector3.ZERO
-	play_click_sound()
-	var p_type = part.get_meta("type")
-	if p_type == "case_fan":
-		show_message("Взяли: " + part.get_meta("name") + "\nНажмите R, чтобы переключить направление потока (Вдув/Выдув)")
-	elif p_type == "cooler":
-		if not slots["cpu"]["occupied"]:
-			show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено оранжевым (сначала установите CPU в сокет!)")
-		elif not thermal_paste_applied:
-			show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено зелёным (не забудьте нанести термопасту!)")
-		else:
-			show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено на материнской плате")
-	else:
-		show_message("Взяли: " + part.get_meta("name"))
-
-func try_install():
-	if not raycast.is_colliding():
-		drop_part()
-		return
-	var hit_pos = raycast.get_collision_point()
-	var collider = raycast.get_collider()
-	var part_type = held_part.get_meta("type")
-	var best_slot_id = null
-	var best_dist = 999.0
-	for id in slots:
-		var slot = slots[id]
-		if slot["occupied"]: continue
-		if slot["type"] != part_type: continue
-		# Кулер требует установленный процессор
-		if id == "cooler":
-			if not slots["cpu"]["occupied"]:
-				continue
-		var slot_world_pos = slot["node"].global_position
-		var dist = hit_pos.distance_to(slot_world_pos)
-		var max_dist = 0.55 if part_type == "motherboard" else 0.40
-		if dist < best_dist and dist < max_dist:
-			best_dist = dist
-			best_slot_id = id
-	if not best_slot_id and part_type == "motherboard" and slots.has("mb_slot") and not slots["mb_slot"]["occupied"]:
-		if pc_case and (pc_case.is_ancestor_of(collider) or collider == pc_case):
-			best_slot_id = "mb_slot"
-	if best_slot_id:
-		install_part(best_slot_id)
-	else:
-		# Детальные сообщения об ошибке
-		if part_type == "cooler":
-			if not slots["cpu"]["occupied"]:
-				show_error("Сначала установите процессор в сокет!")
-			else:
-				show_error("Подойдите ближе к слоту кулера на материнской плате")
-		elif part_type == "motherboard" and not case_lid_open:
-			show_error("Откройте крышку корпуса (F) перед установкой материнской платы!")
-		else:
-			show_error("Рядом нет подходящего слота для " + part_type.to_upper())
-		add_mistake()
-
-func install_part(slot_id: String):
-	var slot = slots[slot_id]
-	var part = held_part
-
-	# Проверка совместимости
-	if not check_compatibility(part, slot):
-		animate_error_shake(part)
-		add_mistake()
-		return
-
-	if slot["occupied"]:
-		animate_error_shake(part)
-		show_error("Слот уже занят!")
-		return
-
-	# Материнская плата — проверяем крышку и отвёртку
-	if slot_id == "mb_slot":
-		if not case_lid_open:
-			animate_error_shake(part)
-			show_error("Сначала откройте боковую крышку корпуса (F)!")
-			add_mistake()
-			return
-
-	# Закрепить позицию
-	_set_part_colliders_enabled(part, true)
-	slot["occupied"] = true
-	slot["part_id"] = part.get_meta("id")
-	part.reparent(slot["parent"])
-
-	if slot_id == "mb_slot":
-		part.position = slot["position"] + Vector3(slot["size"].x * 0.5, 0, 0)
-		part.basis = Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0))
-		motherboard_installed = true
-		show_message("Материнская плата в корпусе! Теперь закрепите её отвёрткой (возьмите отвёртку)")
-	else:
-		part.position = slot["position"] + Vector3(0, slot["size"].y * 0.5 + 0.002, 0)
-		part.rotation = Vector3.ZERO
-
-	# Анимация плавной установки
-	animate_install(part)
-
-	# Скрываем индикатор занятого слота после установки детали
-	slot["indicator"].visible = false
-	held_part = null
-
-	# Проверка типа детали и ориентации
-	if part.get_meta("type") == "case_fan":
-		if case_fan_orientation == "intake":
-			show_error("Задний вентилятор установлен на ВДУВ!\nНа задней панели вентилятор должен работать на ВЫДУВ наружу. (-10 очков)")
-			score = max(0, score - 10)
-			update_score_display()
-			add_mistake()
-		else:
-			show_message("Корпусной вентилятор установлен правильно (ВЫДУВ наружу)! Горячий воздух отводится из корпуса.")
-	elif part.get_meta("type") == "cooler":
-		if not thermal_paste_applied:
-			show_message("Кулер установлен, но термопаста НЕ была нанесена!\nВнимание: при включении возможен перегрев CPU.")
-		else:
-			show_message("Кулер процессора установлен! Охлаждение готово.")
-	else:
-		show_message("Установлено: " + part.get_meta("name"))
-
-	# Звук в зависимости от типа детали
-	match part.get_meta("type"):
-		"ram", "gpu": play_snap_sound()
-		_: play_click_sound()
-
-	# Старт таймера
-	if not timer_active and current_mode != "test":
-		timer_active = true
-		build_start_time = Time.get_ticks_msec()
-
-	# Пошаговый режим
-	if current_mode == "guided":
-		var real_step_id = part.get_meta("id")
-		if current_step < guided_steps.size() and guided_steps[current_step] == real_step_id:
-			advance_guided_step()
-
-# ============================================
-# ПРОВЕРКА СОВМЕСТИМОСТИ
-# ============================================
 func check_compatibility(part, slot) -> bool:
-	if not part or not is_instance_valid(part) or not part.has_meta("compat"):
-		return true
-	var part_compat = str(part.get_meta("compat"))
-
-	var mb_socket = ""
-	var mb_ram_type = ""
-	if motherboard_node and is_instance_valid(motherboard_node):
-		if motherboard_node.has_meta("socket"):
-			mb_socket = str(motherboard_node.get_meta("socket"))
-		if motherboard_node.has_meta("ram_type"):
-			mb_ram_type = str(motherboard_node.get_meta("ram_type"))
-
-	var slot_type = slot.get("type", "") if slot is Dictionary else ""
-	var res = CompatibilityManager.check_part_slot_compatibility(part_compat, slot_type, mb_socket, mb_ram_type)
-	if not res.get("compatible", true):
-		show_error(res.get("error_message", "Несовместимая деталь!"))
-		return false
-
+	if parts_mgr:
+		return parts_mgr.check_compatibility(part, slot)
 	return true
 
-func drop_part():
-	if not held_part: return
-	_set_part_colliders_enabled(held_part, true)
-	# Пересоздаём коллайдер
-	for child in held_part.get_children():
-		if child is StaticBody3D:
-			child.free()
-	var static_body = StaticBody3D.new()
-	var col = CollisionShape3D.new()
-	var shape = BoxShape3D.new()
-	var part_size = held_part.get_meta("size")
-	if held_part == motherboard_node:
-		shape.size = Vector3(0.37, 0.025, 0.37)
-		static_body.name = "MBBody"
-	elif held_part.get_meta("type") in ["ram", "ssd"]:
-		shape.size = part_size * 5
-	else:
-		shape.size = part_size * 2
-	col.shape = shape
-	static_body.add_child(col)
-	static_body.collision_layer = 2
-	static_body.collision_mask = 0
-	held_part.add_child(static_body)
-	var orig_pos = held_part.get_meta("original_pos")
-	held_part.reparent(self)
-	held_part.position = orig_pos
-	held_part.rotation = Vector3.ZERO
-	held_part = null
+func drop_part() -> void:
+	if parts_mgr: parts_mgr.drop_part()
 
 func get_slot_for_part(part: Node3D) -> String:
-	if not part: return ""
-	var part_id = part.get_meta("id", "")
-	for sid in slots:
-		if slots[sid]["occupied"] and slots[sid].get("part_id", "") == part_id:
-			return sid
-	return ""
+	return parts_mgr.get_slot_for_part(part) if parts_mgr else ""
 
 func try_extract() -> bool:
-	if not raycast or not raycast.is_colliding(): return false
-	var collider = raycast.get_collider()
-	var hit_pos = raycast.get_collision_point()
+	return parts_mgr.try_extract() if parts_mgr else false
 
-	# Если материнская плата еще на столе (не в корпусе) — НЕ извлекаем из неё детали по клику [E] / ЛКМ,
-	# чтобы игрок мог свободно взять материнскую плату со всеми установленными деталями в руки!
-	if not motherboard_installed:
-		if collider and (collider == motherboard_node or (motherboard_node and motherboard_node.is_ancestor_of(collider))):
-			return false
+func find_part_node(node: Node) -> Node3D:
+	return parts_mgr.find_part_node(node) if parts_mgr else null
 
-	# 1. Прямой поиск детали по коллайдеру
-	var part = find_part_node(collider)
-	var target_slot_id = ""
-	if part:
-		target_slot_id = get_slot_for_part(part)
-		# Если прицел направлен прямо на свободную/неустановленную деталь на столе — это подбор, не извлечение!
-		if target_slot_id == "":
-			return false
+func extract_part(slot_id: String, depth: int = 0) -> void:
+	if parts_mgr: parts_mgr.extract_part(slot_id, depth)
 
-	# 2. Если попали рядом со слотом
-	if target_slot_id == "":
-		var best_dist = 999.0
-		for sid in slots:
-			var slot = slots[sid]
-			if not slot["occupied"] or not slot.has("part_id"): continue
-			# Если материнская плата еще на столе, не извлекать её слоты дистанционным поиском
-			if not motherboard_installed and slot.get("parent") == motherboard_node:
-				continue
-			var p_node = parts.get(slot["part_id"], null)
-			if p_node and is_instance_valid(p_node):
-				var d = hit_pos.distance_to(p_node.global_position)
-				if d < best_dist and d < 0.35:
-					best_dist = d
-					target_slot_id = sid
-
-	if target_slot_id == "":
-		return false
-
-	# 3. Проверка доступа через боковую крышку
-	if motherboard_installed and not case_lid_open and target_slot_id != "case_fan":
-		show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
-		play_error_sound()
-		return true
-
-	# 4. Физические зависимости компонентов:
-	# Нельзя снять процессор, пока на нём стоит кулер
-	if target_slot_id == "cpu" and slots["cooler"]["occupied"]:
-		show_error("Сначала снимите кулер процессора — он закрывает сокет CPU!")
-		play_error_sound()
-		return true
-
-	# Нельзя вынуть материнскую плату, пока она прикручена к корпусу
-	if target_slot_id == "mb_slot" and mb_screwed:
-		show_error("Материнская плата прикручена! Возьмите отвёртку и открутите 4 болта.")
-		play_error_sound()
-		return true
-
-	extract_part(target_slot_id)
-	return true
-
-func find_part_node(node):
-	var current = node
-	while current:
-		if current.is_in_group("parts"):
-			return current
-		current = current.get_parent()
-	return null
-
-func extract_part(slot_id: String, depth: int = 0):
-	if depth > 12:
-		show_error("Ошибка рекурсии!")
-		return
-	if held_part:
-		drop_part()
-	var slot = slots[slot_id]
-	if not slot["occupied"] or not slot.has("part_id"):
-		show_message("Слот пуст")
-		return
-	var part_id = slot["part_id"]
-	if not parts.has(part_id):
-		show_error("Деталь не найдена!")
-		return
-	var part = parts[part_id]
-
-	# Если извлекаем материнку — рекурсивно извлекаем все дочерние слоты
-	if slot_id == "mb_slot":
-		var mb_slots = []
-		for id in slots:
-			if slots[id]["parent"] == motherboard_node and slots[id]["occupied"]:
-				mb_slots.append(id)
-		for sid in mb_slots:
-			if slots[sid]["occupied"]:
-				extract_part(sid, depth + 1)
-		part.rotation = Vector3.ZERO
-		motherboard_installed = false
-		mb_screwed = false
-		screw_count = 0
-		# АВТОМАТИЧЕСКИ ОТКЛЮЧАЕМ И УДАЛЯЕМ ВСЕ ПРОВОДА ПИТАНИЯ БП!
-		reset_all_cables()
-
-	# Если извлекаем видеокарту — отсоединяем кабель PCIe питания
-	if slot_id == "gpu":
-		disconnect_single_cable("gpu_power")
-
-	# Если извлекаем процессор — счищаем каплю термопасты
-	if slot_id == "cpu":
-		thermal_paste_applied = false
-		var dot = part.get_node_or_null("PasteDot")
-		if dot: dot.queue_free()
-		if thermal_paste_node:
-			thermal_paste_node.visible = true
-
-	# АВАРИЙНОЕ ВЫКЛЮЧЕНИЕ ПК ПРИ ИЗВЛЕЧЕНИИ ЛЮБОЙ ДЕТАЛИ НА ХОДУ
-	var was_powered_on = pc_booted or is_booting
-	if was_powered_on:
-		shutdown_pc_emergency("ПК АВАРИЙНО ВЫКЛЮЧИЛСЯ!\nИзвлечён компонент: " + part.get_meta("name") + "\n(Разрыв цепи питания привёл к экстренному размыканию реле)")
-	else:
-		play_click_sound()
-		show_message("Извлечено: " + part.get_meta("name"))
-
-
-	slot["occupied"] = false
-	slot.erase("part_id")
-	slot["indicator"].visible = true
-	var mat = slot["indicator"].get_surface_override_material(0)
-	mat.albedo_color = Color(1, 1, 0, 0.4)
-	var orig_pos = part.get_meta("original_pos")
-	part.reparent(self)
-	part.position = orig_pos
-	part.rotation = Vector3.ZERO
-
-	# Пересоздаём коллайдер детали для подбора
-	for child in part.get_children():
-		if child is StaticBody3D:
-			child.free()
-	var static_body = StaticBody3D.new()
-	var col = CollisionShape3D.new()
-	var shape = BoxShape3D.new()
-	var part_size = part.get_meta("size")
-	if part == motherboard_node:
-		shape.size = Vector3(0.37, 0.025, 0.37)
-		static_body.name = "MBBody"
-	elif part.get_meta("type") in ["ram", "ssd"]:
-		shape.size = part_size * 5
-	else:
-		shape.size = part_size * 2
-	col.shape = shape
-	static_body.add_child(col)
-	static_body.collision_layer = 2
-	static_body.collision_mask = 0
-	part.add_child(static_body)
-
-# ============================================
-# ПОДСВЕТКА СЛОТОВ
-# ============================================
-func update_slot_highlights():
-	for id in slots:
-		var slot = slots[id]
-		if slot["occupied"]:
-			if slot["indicator"].visible:
-				slot["indicator"].visible = false
-			continue
-
-		slot["indicator"].visible = true
-		var mat = slot["indicator"].get_surface_override_material(0)
-		if held_part:
-			var part_type = held_part.get_meta("type")
-			var matches = (part_type == slot["type"])
-			if matches:
-				if id == "cooler" and not slots["cpu"]["occupied"]:
-					# Предупреждающая подсветка: место кулера, но сначала нужен CPU
-					mat.albedo_color = Color(1.0, 0.65, 0.1, 0.85)
-				else:
-					# Яркий неоново-зеленый при соответствии слота
-					mat.albedo_color = Color(0.0, 1.0, 0.5, 0.85)
-			else:
-				# Серый полупрозрачный для неподходящих слотов
-				mat.albedo_color = Color(0.35, 0.35, 0.35, 0.12)
-		else:
-			if current_mode == "guided" and current_step < guided_steps.size():
-				var step = guided_steps[current_step]
-				if id == step:
-					mat.albedo_color = Color(0.0, 0.85, 1.0, 0.85)
-				else:
-					mat.albedo_color = Color(0.25, 0.25, 0.3, 0.15)
-			else:
-				mat.albedo_color = Color(1.0, 0.9, 0.2, 0.45)
+func update_slot_highlights() -> void:
+	if parts_mgr: parts_mgr.update_slot_highlights()
 
 func update_info_card():
 	if not raycast or not raycast.is_colliding():
@@ -2745,24 +2286,13 @@ func _on_wiring_completed():
 
 
 # ============================================================
-# АНИМАЦИИ УСТАНОВКИ
+# АНИМАЦИИ УСТАНОВКИ (ДЕЛЕГИРОВАНО В PARTS_MANAGER)
 # ============================================================
-func animate_install(part_node: Node3D):
-	if not install_anim_enabled: return
-	var tween = create_tween()
-	tween.set_ease(Tween.EASE_OUT)
-	tween.set_trans(Tween.TRANS_BACK)
-	part_node.scale = Vector3.ONE
-	tween.tween_property(part_node, "scale", Vector3(1.18, 1.18, 1.18), 0.12)
-	tween.tween_property(part_node, "scale", Vector3.ONE, 0.18)
+func animate_install(part_node: Node3D) -> void:
+	if parts_mgr: parts_mgr.animate_install(part_node)
 
-func animate_error_shake(node: Node3D):
-	var orig = node.position
-	var tween = create_tween()
-	for _i in range(4):
-		tween.tween_property(node, "position", orig + Vector3(0.015, 0, 0), 0.05)
-		tween.tween_property(node, "position", orig - Vector3(0.015, 0, 0), 0.05)
-	tween.tween_property(node, "position", orig, 0.05)
+func animate_error_shake(node: Node3D) -> void:
+	if parts_mgr: parts_mgr.animate_error_shake(node)
 
 
 # ============================================================
