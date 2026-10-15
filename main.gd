@@ -40,8 +40,40 @@ var is_booting: bool:
 	get: return boot_mgr.is_booting if boot_mgr else false
 	set(val): if boot_mgr: boot_mgr.is_booting = val
 
-var message_label: Label
-var message_timer = 0.0
+# ============================================
+# ИНТЕРФЕЙС И ОВЕРЛЕИ (ДЕЛЕГИРОВАНО В HUD_MANAGER)
+# ============================================
+const HUDManagerScript = preload("res://scripts/ui/hud_manager.gd")
+var hud_mgr = null
+
+var timer_label: Label:
+	get: return hud_mgr.timer_label if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.timer_label = val
+
+var score_label: Label:
+	get: return hud_mgr.score_label if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.score_label = val
+
+var step_label: Label:
+	get: return hud_mgr.step_label if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.step_label = val
+
+var info_card: PanelContainer:
+	get: return hud_mgr.info_card if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.info_card = val
+
+var info_label: Label:
+	get: return hud_mgr.info_label if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.info_label = val
+
+var message_label: Label:
+	get: return hud_mgr.message_label if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.message_label = val
+
+var message_timer: float:
+	get: return hud_mgr.message_timer if hud_mgr else 0.0
+	set(val): if hud_mgr: hud_mgr.message_timer = val
+
 var motherboard_node: Node3D = null
 var motherboard_installed = false
 
@@ -86,22 +118,15 @@ var guided_steps = [
 	"windows_install"
 ]
 var current_step = 0
-var step_label: Label
-
-# Информационные карточки
-var info_card: PanelContainer
-var info_label: Label
 
 # Таймер
 var build_start_time = 0.0
 var build_end_time = 0.0
-var timer_label: Label
 var timer_active = false
 
 # Очки и ошибки
 var score = 100
 var mistakes = 0
-var score_label: Label
 
 # ============================================
 # ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
@@ -211,7 +236,9 @@ var thermal_paste_node: Node3D:
 	get: return tools_mgr.thermal_paste_node if tools_mgr else null
 	set(val): if tools_mgr: tools_mgr.thermal_paste_node = val
 
-var tool_indicator: Label = null
+var tool_indicator: Label:
+	get: return hud_mgr.tool_indicator if hud_mgr else null
+	set(val): if hud_mgr: hud_mgr.tool_indicator = val
 
 # ============================================
 # ЭЛЕКТРОСЕТЬ 220V И ТУМБЛЕР БП (ДЕЛЕГИРОВАНО В POWER_MANAGER)
@@ -471,6 +498,10 @@ func _ready():
 	audio_mgr.name = "AudioManager"
 	audio_mgr.setup(self)
 	add_child(audio_mgr)
+	hud_mgr = HUDManagerScript.new()
+	hud_mgr.name = "HUDManager"
+	hud_mgr.setup(self)
+	add_child(hud_mgr)
 	tools_mgr = ToolsManagerScript.new()
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
@@ -567,113 +598,13 @@ func _launch_game(mode: String):
 		show_test()
 
 # ============================================
-# HUD
+# HUD И ПРИЦЕЛ (ДЕЛЕГИРОВАНО В HUD_MANAGER)
 # ============================================
 func build_hud():
-	var canvas = CanvasLayer.new()
-	canvas.name = "HUDCanvas"
-	add_child(canvas)
+	if hud_mgr: hud_mgr.build_hud()
 
-	timer_label = Label.new()
-	timer_label.position = Vector2(20, 20)
-	timer_label.add_theme_font_size_override("font_size", 22)
-	timer_label.add_theme_color_override("font_color", Color(1, 1, 0.5))
-	canvas.add_child(timer_label)
-	timer_label.text = "0.0 сек"
-
-	score_label = Label.new()
-	score_label.position = Vector2(20, 50)
-	score_label.add_theme_font_size_override("font_size", 20)
-	score_label.add_theme_color_override("font_color", Color(0.5, 1, 0.5))
-	canvas.add_child(score_label)
-	score_label.text = "Очки: 100"
-
-
-	step_label = Label.new()
-	step_label.position = Vector2(20, 80)
-	step_label.size = Vector2(750, 60)
-	step_label.add_theme_font_size_override("font_size", 16)
-	step_label.add_theme_color_override("font_color", Color(1, 0.9, 0.3))
-	canvas.add_child(step_label)
-	step_label.visible = (current_mode == "guided")
-
-	tool_indicator = Label.new()
-	tool_indicator.position = Vector2(20, 145)
-	tool_indicator.add_theme_font_size_override("font_size", 17)
-	tool_indicator.add_theme_color_override("font_color", Color(1, 0.7, 0.2))
-	canvas.add_child(tool_indicator)
-	tool_indicator.text = ""
-
-	var keys_hint = Label.new()
-	keys_hint.anchor_right = 1.0
-	keys_hint.anchor_top = 1.0
-	keys_hint.anchor_bottom = 1.0
-	keys_hint.offset_top = -28
-	keys_hint.offset_bottom = -4
-	keys_hint.offset_left = 8
-	keys_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	keys_hint.add_theme_font_size_override("font_size", 12)
-	keys_hint.add_theme_color_override("font_color", Color(0.45, 0.55, 0.7))
-	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  P — тумблер БП  |  Z — зум монитора  |  6/7 — клавиши  |  G — глоссарий  |  Space — пуск"
-	canvas.add_child(keys_hint)
-
-	info_card = PanelContainer.new()
-	info_card.visible = false
-	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.03, 0.06, 0.12, 0.88)
-	sb.corner_radius_top_left = 8
-	sb.corner_radius_top_right = 8
-	sb.corner_radius_bottom_left = 8
-	sb.corner_radius_bottom_right = 8
-	sb.border_width_left = 1
-	sb.border_width_right = 1
-	sb.border_width_top = 1
-	sb.border_width_bottom = 1
-	sb.border_color = Color(0.25, 0.45, 0.75, 0.45)
-	sb.content_margin_left = 10
-	sb.content_margin_right = 10
-	sb.content_margin_top = 8
-	sb.content_margin_bottom = 8
-	info_card.add_theme_stylebox_override("panel", sb)
-	info_card.position = Vector2(20, 175)
-	info_card.custom_minimum_size = Vector2(280, 0)
-	canvas.add_child(info_card)
-
-	info_label = Label.new()
-	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info_label.custom_minimum_size = Vector2(260, 0)
-	info_label.add_theme_font_size_override("font_size", 11)
-	info_label.add_theme_constant_override("line_spacing", 2)
-	info_label.add_theme_color_override("font_color", Color(0.80, 0.92, 0.88))
-	info_card.add_child(info_label)
-
-# ============================================
-# ПРИЦЕЛ
-# ============================================
 func build_crosshair():
-	var canvas = CanvasLayer.new()
-	canvas.name = "CrosshairCanvas"
-	add_child(canvas)
-	var ctrl = Control.new()
-	ctrl.anchor_left = 0.5
-	ctrl.anchor_top = 0.5
-	ctrl.anchor_right = 0.5
-	ctrl.anchor_bottom = 0.5
-	ctrl.offset_left = -8
-	ctrl.offset_top = -8
-	ctrl.offset_right = 8
-	ctrl.offset_bottom = 8
-	canvas.add_child(ctrl)
-	var h = ColorRect.new()
-	h.color = Color(1, 1, 1, 0.75)
-	h.size = Vector2(14, 2)
-	h.position = Vector2(-7, -1)
-	ctrl.add_child(h)
-	var v = ColorRect.new()
-	v.color = Color(1, 1, 1, 0.75)
-	v.size = Vector2(2, 14)
-	v.position = Vector2(-1, -7)
-	ctrl.add_child(v)
+	if hud_mgr: hud_mgr.build_crosshair()
 
 # ============================================
 # КОМНАТА, ВЕРСТАК И КОРПУС ПК (ДЕЛЕГИРОВАНО В WORLD_BUILDER_3D)
@@ -782,41 +713,7 @@ func toggle_monitor_zoom():
 	if camera_ctrl: camera_ctrl.toggle_monitor_zoom()
 
 func build_message_ui():
-	var panel = PanelContainer.new()
-	panel.name = "MsgPanel"
-	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.02, 0.03, 0.08, 0.88)
-	sb.corner_radius_top_left = 10
-	sb.corner_radius_top_right = 10
-	sb.corner_radius_bottom_left = 10
-	sb.corner_radius_bottom_right = 10
-	sb.border_width_left = 1
-	sb.border_width_right = 1
-	sb.border_width_top = 1
-	sb.border_width_bottom = 1
-	sb.border_color = Color(0.2, 0.4, 0.9, 0.5)
-	sb.content_margin_left = 24
-	sb.content_margin_right = 24
-	sb.content_margin_top = 10
-	sb.content_margin_bottom = 10
-	panel.add_theme_stylebox_override("panel", sb)
-	panel.anchor_left = 0.1
-	panel.anchor_right = 0.9
-	panel.anchor_top = 0.0
-	panel.anchor_bottom = 0.0
-	panel.offset_top = 52
-	panel.offset_bottom = 102
-
-	message_label = Label.new()
-	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	message_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	message_label.add_theme_font_size_override("font_size", 18)
-	message_label.add_theme_color_override("font_color", Color.WHITE)
-	panel.add_child(message_label)
-
-	add_child(panel)
-	panel.visible = false
+	if hud_mgr: hud_mgr.build_message_ui()
 
 # ============================================
 # СОВЕТЫ "А ТЫ ЗНАЛ?"
@@ -1092,22 +989,13 @@ func _process(delta):
 	# FOV zoom
 	if camera_ctrl: camera_ctrl.process_camera_zoom(delta)
 
-	# Таймер сборки
-	if timer_active:
-		var elapsed = (Time.get_ticks_msec() - build_start_time) / 1000.0
-		timer_label.text = "%.1f сек" % elapsed
-
-
 	# Анимация кулеров при работе ПК
 	if boot_mgr:
 		boot_mgr.animate_fans(delta)
 
-	# Скрытие сообщения
-	if message_timer > 0:
-		message_timer -= delta
-		if message_timer <= 0:
-			if has_node("MsgPanel"):
-				get_node("MsgPanel").visible = false
+	# Таймер сборки и скрытие сообщения HUD
+	if hud_mgr:
+		hud_mgr.process_hud(delta)
 
 	# Советы
 	if not glossary_open:
@@ -1276,118 +1164,7 @@ func update_slot_highlights() -> void:
 	if parts_mgr: parts_mgr.update_slot_highlights()
 
 func update_info_card():
-	if not raycast or not raycast.is_colliding():
-		info_card.visible = false
-		return
-	var rp_node = raycast.get_collider()
-	if not is_instance_valid(rp_node): return
-	var collider = rp_node
-
-	# Проверяем интерактивные элементы электросети и питания
-	if _is_psu_cable_or_socket(collider):
-		var state_str = "Подключен к БП" if psu_cable_plugged else "Отключен (лежит на столе)"
-		var act_str = "Отключить от БП" if psu_cable_plugged else "Вставить кабель в БП"
-		info_label.text = "Сетевой силовой кабель IEC C13 (220V)\nСостояние: %s\n\n[E] или [ЛКМ] - %s\nСовет: Питает блок питания от сети 220В. Если забыть его воткнуть - ПК не включится." % [state_str, act_str]
-		info_card.visible = true
-		return
-
-	if _is_psu_switch(collider):
-		var state_str = "ВКЛЮЧЕНО [ I ]" if psu_switch_on else "ВЫКЛЮЧЕНО [ 0 ]"
-		var act_str = "выключить [0]" if psu_switch_on else "включить [I]"
-		info_label.text = "Тумблер блока питания (I/O Rocker Switch)\nСостояние: %s\n\n[P] - Нажмите, чтобы %s\nСовет: Без тумблера в [I] дежурное питание +5VSB не поступает на материнку." % [state_str, act_str]
-		info_card.visible = true
-		return
-
-	if _is_power_strip(collider):
-		info_label.text = "Сетевой фильтр 220V (Surge Protector)\nПитание: 230V 50Hz | Индикатор: АКТИВЕН\nСовет: Обеспечивает электропитание рабочего места и защиту от перенапряжений."
-		info_card.visible = true
-		return
-
-	if _is_power_button(collider):
-		var status_str = "Работает" if pc_booted else "Выключен"
-		info_label.text = "Кнопка включения ПК (Power SW)\nСтатус: %s\n\n[E], [ЛКМ] или [ПРОБЕЛ] — Включить компьютер" % status_str
-		info_card.visible = true
-		return
-
-	# Клавиатура с гигантскими клавишами «6» и «7»
-	if _is_meme_key(collider):
-		var k_name = "6" if (collider.name == "Key6Body" or (collider.get_parent() and collider.get_parent().name == "Key6Body")) else "7"
-		info_label.text = "Клавиатура '6' & '7' (Мем-эдишн)\nКлавиша: [ %s ]\n\n[E] или [ЛКМ] — Нажать клавишу со звуком щелчка" % k_name
-		info_card.visible = true
-		return
-
-	# HDMI кабель и порты
-	if _is_hdmi_interactable(collider):
-		var state_str = "Подключён (видеосигнал активен)" if hdmi_cable_connected else "Отключён (на мониторе нет сигнала)"
-		var act_str = "Отключить кабель" if hdmi_cable_connected else "Подключить кабель HDMI от видеокарты к монитору"
-		info_label.text = "Кабель HDMI 2.1 (Ultra High Speed)\nСостояние: %s\n\n[E] или [ЛКМ] — %s" % [state_str, act_str]
-		info_card.visible = true
-		return
-
-	# Загрузочная флешка Windows 11
-	if _is_usb_interactable(collider):
-		var state_str = "Вставлена в USB-порт корпуса" if usb_drive_plugged else "Лежит на столе"
-		var act_str = "Извлечь флешку" if usb_drive_plugged else "Вставить флешку в USB-порт ПК для установки Windows 11"
-		info_label.text = "Загрузочная флешка Windows 11 (USB 3.2)\nСостояние: %s\n\n[E] или [ЛКМ] — %s" % [state_str, act_str]
-		info_card.visible = true
-		return
-
-	# Экран монитора
-	if _is_monitor_screen(collider):
-		var mon_txt = "Монитор (HDMI 1, 24 IPS)"
-		if monitor_state == "off":
-			mon_txt += "\nСостояние: Выключен (ПК не включен)\n\n[Z] — Приблизить монитор"
-		elif monitor_state == "no_signal":
-			mon_txt += "\nСостояние: Нет сигнала (подключите HDMI-кабель к ПК)\n\n[Z] — Приблизить монитор"
-		elif monitor_state == "rickroll":
-			mon_txt += "\nСостояние: Воспроизведение видео (Рикролл)\n\n[E] или [ЛКМ] — Продолжить (закрыть видео)\n[Z] — Приблизить монитор"
-		elif monitor_state == "win_setup":
-			mon_txt += "\nСостояние: Мастер установки Windows 11\n\n[E] или [ЛКМ] — Далее\n[Z] — Приблизить монитор"
-		elif monitor_state == "desktop":
-			mon_txt += "\nСостояние: Windows 11 Pro (Рабочий стол)\n\n[Z] — Приблизить монитор"
-		else:
-			mon_txt += "\nСостояние: Работает\n\n[Z] — Приблизить монитор"
-		info_label.text = mon_txt
-		info_card.visible = true
-		return
-
-	# Материнская плата на столе (в сборе)
-	if not motherboard_installed and (collider == motherboard_node or (motherboard_node and motherboard_node.is_ancestor_of(collider))):
-		var installed_cnt = 0
-		for sid in ["cpu", "cooler", "ram1", "ram2", "gpu", "ssd"]:
-			if slots.has(sid) and slots[sid]["occupied"]:
-				installed_cnt += 1
-		var status_txt = " (в сборе, деталей: %d)" % installed_cnt if installed_cnt > 0 else ""
-		info_label.text = "Материнская плата%s\n\n[E] или [ЛКМ] — Взять материнскую плату для установки в корпус" % status_txt
-		info_card.visible = true
-		return
-
-	# Проверяем наведение на инструменты
-	if thermal_paste_node and is_instance_valid(thermal_paste_node) and thermal_paste_node.is_ancestor_of(collider):
-		info_label.text = GameDatabase.PART_INFO.get("thermal_paste", "Термопаста\nНажмите [E], чтобы взять")
-		info_card.visible = true
-		return
-
-	if screwdriver_node and is_instance_valid(screwdriver_node) and screwdriver_node.is_ancestor_of(collider):
-		info_label.text = GameDatabase.PART_INFO.get("screwdriver", "Крестовая отвёртка PH2\nНажмите [E], чтобы взять")
-		info_card.visible = true
-		return
-
-
-	var part = find_part_node(collider)
-	if part and GameDatabase.PART_INFO.has(part.get_meta("id")):
-		var txt = GameDatabase.PART_INFO[part.get_meta("id")]
-		var slot_id = get_slot_for_part(part)
-		if slot_id != "":
-			txt += "\n\n[E] — Извлечь деталь"
-			if pc_booted or is_booting:
-				txt += "\n Внимание: ПК работает! Извлечение выключит систему"
-		else:
-			txt += "\n\n[E] — Взять деталь"
-		info_label.text = txt
-		info_card.visible = true
-	else:
-		info_card.visible = false
+	if hud_mgr: hud_mgr.update_info_card()
 
 func toggle_case_lid():
 	if world_builder: world_builder.toggle_case_lid()
@@ -1411,11 +1188,7 @@ func flash_screen(color: Color):
 	if boot_mgr: boot_mgr.flash_screen(color)
 
 func update_score_display():
-	if score_label:
-		if mistakes > 0:
-			score_label.text = "Очки: %d (ошибок: %d)" % [score, mistakes]
-		else:
-			score_label.text = "Очки: %d" % score
+	if hud_mgr: hud_mgr.update_score_display()
 
 # ============================================
 # ПОШАГОВЫЙ РЕЖИМ
@@ -1563,20 +1336,10 @@ func _on_victory_restart():
 # СООБЩЕНИЯ
 # ============================================
 func show_message(text: String):
-	if not message_label: return
-	message_label.text = text
-	message_label.add_theme_color_override("font_color", Color(0.9, 0.95, 1.0))
-	if has_node("MsgPanel"):
-		get_node("MsgPanel").visible = true
-	message_timer = 4.5
+	if hud_mgr: hud_mgr.show_message(text)
 
 func show_error(text: String):
-	if not message_label: return
-	message_label.text = text
-	message_label.add_theme_color_override("font_color", Color(1, 0.45, 0.45))
-	if has_node("MsgPanel"):
-		get_node("MsgPanel").visible = true
-	message_timer = 5.0
+	if hud_mgr: hud_mgr.show_error(text)
 
 # ============================================
 # F5 — ПЕРЕЗАПУСК
