@@ -67,15 +67,6 @@ func build_meme_keyboard() -> void:
 	# Неоновая RGB полоска по нижнему краю
 	make_box_on(kb_root, Vector3(0.38, 0.006, 0.008), Vector3(0, -0.008, 0.098), Color(0.2, 0.85, 1.0))
 
-	# Табличка с названием модели
-	var kb_lbl = Label3D.new()
-	kb_lbl.text = "PRO 6&7 EDITION"
-	kb_lbl.font_size = 10
-	kb_lbl.pixel_size = 0.0004
-	kb_lbl.modulate = Color(0.4, 0.6, 0.8)
-	kb_lbl.position = Vector3(0, 0.013, -0.085)
-	kb_lbl.rotation_degrees = Vector3(-90, 0, 0)
-	kb_root.add_child(kb_lbl)
 
 	# 2. ОГРОМНАЯ КЛАВИША «6» (занимает левую половину)
 	key6_node = Node3D.new()
@@ -188,14 +179,6 @@ func build_hdmi_system() -> void:
 	make_box_on(hdmi_cable_node, Vector3(0.04, 0.018, 0.08), Vector3(0.04, 0.006, 0.04), Color(0.85, 0.70, 0.18))
 	make_box_on(hdmi_cable_node, Vector3(0.024, 0.010, 0.028), Vector3(0.04, 0.006, 0.09), Color(0.95, 0.82, 0.25))
 
-	var hdmi_lbl = Label3D.new()
-	hdmi_lbl.text = "HDMI 2.1"
-	hdmi_lbl.font_size = 11
-	hdmi_lbl.pixel_size = 0.0004
-	hdmi_lbl.modulate = Color(1.0, 0.85, 0.3)
-	hdmi_lbl.position = Vector3(0, 0.022, 0)
-	hdmi_lbl.rotation_degrees = Vector3(-90, 0, 0)
-	hdmi_cable_node.add_child(hdmi_lbl)
 
 	var c_body = StaticBody3D.new()
 	c_body.name = "HDMICableBody"
@@ -336,14 +319,6 @@ func build_usb_flash_drive() -> void:
 	# Синий разъем USB 3.0
 	make_box_on(usb_flash_node, Vector3(0.018, 0.008, 0.022), Vector3(0, 0, -0.040), Color(0.15, 0.45, 0.95))
 
-	var usb_lbl = Label3D.new()
-	usb_lbl.text = "WIN 11"
-	usb_lbl.font_size = 11
-	usb_lbl.pixel_size = 0.0004
-	usb_lbl.modulate = Color(1.0, 1.0, 1.0)
-	usb_lbl.position = Vector3(0, 0.012, 0)
-	usb_lbl.rotation_degrees = Vector3(-90, 0, 0)
-	usb_flash_node.add_child(usb_lbl)
 
 	var u_body = StaticBody3D.new()
 	u_body.name = "USBDriveBody"

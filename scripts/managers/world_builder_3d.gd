@@ -129,15 +129,30 @@ func build_pc_case() -> void:
 	# Дно
 	make_box_on(pc_case, Vector3(0.5, 0.02, 0.5), Vector3(0, -0.24, 0), Color(0.12, 0.12, 0.16))
 	# Левая стенка (глухая)
-	make_box_on(pc_case, Vector3(0.01, 0.5, 0.5), Vector3(-0.245, 0, 0), Color(0.12, 0.12, 0.16))
-	# Правая стенка (боковая крышка — стекло)
-	main.case_lid = make_box_on(pc_case, Vector3(0.01, 0.5, 0.5), Vector3(0.245, 0, 0), Color(0.3, 0.45, 0.65, 0.6))
+	make_box_on(pc_case, Vector3(0.01, 0.47, 0.48), Vector3(-0.245, 0.005, 0), Color(0.12, 0.12, 0.16))
 	# Верх
 	make_box_on(pc_case, Vector3(0.5, 0.01, 0.5), Vector3(0, 0.245, 0), Color(0.12, 0.12, 0.16))
 	# Передняя панель
-	make_box_on(pc_case, Vector3(0.5, 0.5, 0.01), Vector3(0, 0, 0.245), Color(0.15, 0.15, 0.2))
+	make_box_on(pc_case, Vector3(0.5, 0.47, 0.01), Vector3(0, 0.005, 0.245), Color(0.15, 0.15, 0.2))
 	# Задняя панель
-	make_box_on(pc_case, Vector3(0.5, 0.5, 0.01), Vector3(0, 0, -0.245), Color(0.12, 0.12, 0.16))
+	make_box_on(pc_case, Vector3(0.5, 0.47, 0.01), Vector3(0, 0.005, -0.245), Color(0.12, 0.12, 0.16))
+
+	# Правая стенка (боковая крышка — прозрачное закалённое стекло)
+	var lid_mesh = MeshInstance3D.new()
+	lid_mesh.name = "CaseLid"
+	var lid_box = BoxMesh.new()
+	lid_box.size = Vector3(0.008, 0.468, 0.478)
+	lid_mesh.mesh = lid_box
+	var glass_mat = StandardMaterial3D.new()
+	glass_mat.albedo_color = Color(0.28, 0.42, 0.60, 0.45)
+	glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass_mat.roughness = 0.12
+	glass_mat.metallic = 0.08
+	glass_mat.cull_mode = BaseMaterial3D.CULL_BACK
+	lid_mesh.set_surface_override_material(0, glass_mat)
+	lid_mesh.position = Vector3(0.245, 0.005, 0.0)
+	pc_case.add_child(lid_mesh)
+	main.case_lid = lid_mesh
 	# Кнопка питания
 	main.power_button = make_box_on(pc_case, Vector3(0.04, 0.04, 0.016), Vector3(0.18, 0.17, -0.245), Color(0.1, 0.7, 0.3))
 	# Световой индикатор (синий)

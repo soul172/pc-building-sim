@@ -1,6 +1,6 @@
 extends Node3D
 
-## PC Building Sim — Главный координатор игры
+## PC Building Sim — Главный координатор игры (Façade & Orchestrator)
 ## Делегирует ответственность специализированным менеджерам в scripts/managers/, scripts/ui/, scripts/audio/.
 
 # ============================================================
