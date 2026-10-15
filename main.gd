@@ -2082,226 +2082,47 @@ func make_box_on(parent, size, pos, color) -> MeshInstance3D:
 	return mesh_inst
 
 # ============================================
-# ЗВУКИ (процедурные — ФИКСИРОВАННАЯ версия без проблемного await)
+# ЗВУКИ (делегированы в SoundSynth)
 # ============================================
 func _gen_sound(freq: float, duration: float, env_speed: float, volume: float = 0.3):
-	var stream = AudioStreamGenerator.new()
-	stream.buffer_length = duration + 0.05
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var samples = int(44100.0 * duration)
-	var data = PackedVector2Array()
-	data.resize(samples)
-	for i in range(samples):
-		var t = float(i) / 44100.0
-		var env = exp(-t * env_speed)
-		var sample = sin(t * freq * TAU) * env * volume
-		data[i] = Vector2(sample, sample)
-	playback.push_buffer(data)
-	get_tree().create_timer(duration + 0.1).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.gen_sound(self, freq, duration, env_speed, volume)
 
 func play_click_sound():
-	_gen_sound(1800.0, 0.1, 35.0, 0.28)
+	SoundSynth.play_click_sound(self)
 
 func play_snap_sound():
-	# Щелчок для RAM/GPU — более резкий
-	_gen_sound(2400.0, 0.08, 60.0, 0.35)
+	SoundSynth.play_snap_sound(self)
 
 func play_error_sound():
-	var stream = AudioStreamGenerator.new()
-	stream.buffer_length = 0.4
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var data = PackedVector2Array()
-	var samples = 17640
-	data.resize(samples)
-	for i in range(samples):
-		var t = float(i) / 44100.0
-		var freq = 180.0 + sin(t * 12.0) * 80.0
-		var sample = sin(t * freq * TAU) * 0.22
-		data[i] = Vector2(sample, sample)
-	playback.push_buffer(data)
-	get_tree().create_timer(0.5).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.play_error_sound(self)
 
 func play_boot_sound():
-	var stream = AudioStreamGenerator.new()
-	stream.buffer_length = 1.0
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var data = PackedVector2Array()
-	var samples = int(44100 * 1.0)
-	data.resize(samples)
-	for i in range(samples):
-		var t = float(i) / 44100.0
-		var env = exp(-t * 2.5)
-		var sample = sin(t * 440.0 * TAU) * env * 0.18
-		data[i] = Vector2(sample, sample)
-	playback.push_buffer(data)
-	get_tree().create_timer(1.1).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.play_boot_sound(self)
 
 func play_screw_sound():
-	# Скрежет отвёртки
-	var stream = AudioStreamGenerator.new()
-	stream.buffer_length = 0.35
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var data = PackedVector2Array()
-	var samples = int(44100 * 0.35)
-	data.resize(samples)
-	for i in range(samples):
-		var t = float(i) / 44100.0
-		var env = exp(-t * 8.0)
-		var noise = (randf() - 0.5) * 2.0
-		var sample = (sin(t * 350.0 * TAU) * 0.5 + noise * 0.5) * env * 0.2
-		data[i] = Vector2(sample, sample)
-	playback.push_buffer(data)
-	get_tree().create_timer(0.45).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.play_screw_sound(self)
 
 func play_paste_sound():
-	# Выдавливание пасты — тихий "пффф"
-	var stream = AudioStreamGenerator.new()
-	stream.buffer_length = 0.3
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var data = PackedVector2Array()
-	var samples = int(44100 * 0.3)
-	data.resize(samples)
-	for i in range(samples):
-		var t = float(i) / 44100.0
-		var env = exp(-t * 10.0) * 0.3 + 0.05 * exp(-t * 3.0)
-		var noise = (randf() - 0.5) * 2.0
-		var sample = noise * env * 0.15
-		data[i] = Vector2(sample, sample)
-	playback.push_buffer(data)
-	get_tree().create_timer(0.4).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.play_paste_sound(self)
 
 func play_beep_sound():
-	# POST-сигнал (бип)
-	_gen_sound(880.0, 0.18, 12.0, 0.25)
+	SoundSynth.play_beep_sound(self)
 
 func play_success_sound():
-	# Успех — восходящие ноты
-	for i in range(3):
-		var freq = 440.0 + i * 220.0
-		get_tree().create_timer(i * 0.15).timeout.connect(func(): _gen_sound(freq, 0.12, 15.0, 0.2))
+	SoundSynth.play_success_sound(self)
 
 # ============================================
 # АУДИОСИСТЕМА БП И РАБОТАЮЩЕГО ПК
 # ============================================
 func play_relay_sound(is_turning_on: bool):
-	# Щелчок силового электромагнитного реле БП (Inrush Bypass Relay)
-	var stream = AudioStreamGenerator.new()
-	var duration = 0.16 if is_turning_on else 0.12
-	stream.buffer_length = duration + 0.05
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var samples = int(44100.0 * duration)
-	var data = PackedVector2Array()
-	data.resize(samples)
-
-	if is_turning_on:
-		# Подача питания: двухфазный щелчок (втягивание якоря + силовой удар контактов)
-		for i in range(samples):
-			var t = float(i) / 44100.0
-			var sample = 0.0
-			if t < 0.02:
-				var env1 = exp(-t * 220.0)
-				sample += sin(t * 1400.0 * TAU) * env1 * 0.25
-			if t >= 0.014:
-				var t2 = t - 0.014
-				var env2 = exp(-t2 * 65.0)
-				var thud = sin(t2 * 180.0 * TAU) * exp(-t2 * 45.0) * 0.35
-				var ping = (sin(t2 * 2150.0 * TAU) * 0.5 + sin(t2 * 920.0 * TAU) * 0.5) * env2 * 0.42
-				var noise = (randf() - 0.5) * exp(-t2 * 180.0) * 0.22
-				sample += thud + ping + noise
-			data[i] = Vector2(sample, sample)
-	else:
-		# Аварийное отключение: резкий металлический отскок пружины (сухой щелчок размыкания)
-		for i in range(samples):
-			var t = float(i) / 44100.0
-			var env = exp(-t * 85.0)
-			var ping = (sin(t * 2700.0 * TAU) * 0.55 + sin(t * 1350.0 * TAU) * 0.45) * env * 0.46
-			var low = sin(t * 240.0 * TAU) * exp(-t * 50.0) * 0.28
-			var noise = (randf() - 0.5) * exp(-t * 140.0) * 0.25
-			var sample = ping + low + noise
-			data[i] = Vector2(sample, sample)
-
-	playback.push_buffer(data)
-	get_tree().create_timer(duration + 0.1).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.play_relay_sound(self, is_turning_on)
 
 func play_switch_sound():
-	# Клавишный тумблер I/O БП — сочный механический щелчок
-	var stream = AudioStreamGenerator.new()
-	stream.buffer_length = 0.12
-	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	add_child(ap)
-	ap.play()
-	var playback = ap.get_stream_playback()
-	var samples = int(44100.0 * 0.08)
-	var data = PackedVector2Array()
-	data.resize(samples)
-	for i in range(samples):
-		var t = float(i) / 44100.0
-		var env = exp(-t * 90.0)
-		var click = (sin(t * 1650.0 * TAU) * 0.6 + sin(t * 820.0 * TAU) * 0.4) * env * 0.38
-		var noise = (randf() - 0.5) * exp(-t * 150.0) * 0.20
-		var sample = click + noise
-		data[i] = Vector2(sample, sample)
-	playback.push_buffer(data)
-	get_tree().create_timer(0.15).timeout.connect(func(): if ap and is_instance_valid(ap): ap.queue_free())
+	SoundSynth.play_switch_sound(self)
 
 func _init_pc_fan_sound():
 	if pc_fan_stream != null: return
-	pc_fan_stream = AudioStreamWAV.new()
-	pc_fan_stream.format = AudioStreamWAV.FORMAT_16_BITS
-	pc_fan_stream.mix_rate = 22050
-	pc_fan_stream.stereo = false
-	
-	var length_sec = 1.0
-	var total_samples = int(22050 * length_sec)
-	var raw_data = PackedByteArray()
-	raw_data.resize(total_samples * 2)
-
-	# Бесшовный цикл: 60Гц + 120Гц (гул электромотора кулера) + шум воздушного потока
-	for i in range(total_samples):
-		var t = float(i) / 22050.0
-		var hum = sin(t * 60.0 * TAU) * 0.28 + sin(t * 120.0 * TAU) * 0.14 + sin(t * 180.0 * TAU) * 0.06
-		var noise = (randf() - 0.5) * 0.15
-		var sample_f = (hum + noise) * 0.20
-		var sample_i16 = clampi(int(sample_f * 32767.0), -32768, 32767)
-		raw_data.encode_s16(i * 2, sample_i16)
-
-	pc_fan_stream.data = raw_data
-	pc_fan_stream.loop_mode = AudioStreamWAV.LOOP_FORWARD
-	pc_fan_stream.loop_begin = 0
-	pc_fan_stream.loop_end = total_samples
-
+	pc_fan_stream = SoundSynth.generate_fan_stream()
 	pc_fan_player = AudioStreamPlayer.new()
 	pc_fan_player.name = "PCFanAmbient"
 	pc_fan_player.stream = pc_fan_stream
@@ -2311,12 +2132,11 @@ func _init_pc_fan_sound():
 func start_pc_fan_ambient():
 	if not pc_fan_player:
 		_init_pc_fan_sound()
-	if pc_fan_player and not pc_fan_player.playing:
-		pc_fan_player.play()
+	SoundSynth.play_fan_sound(pc_fan_player)
 
 func stop_pc_fan_ambient():
-	if pc_fan_player and pc_fan_player.playing:
-		pc_fan_player.stop()
+	SoundSynth.stop_fan_sound(pc_fan_player)
+
 
 
 # ============================================
@@ -5683,7 +5503,7 @@ func press_meme_key(k: String):
 
 func play_key_clack():
 	# Сочный звук механического клика (синие свитчи)
-	_gen_sound(2600.0, 0.05, 90.0, 0.38)
+	SoundSynth.play_key_clack(self)
 
 
 # ============================================================
