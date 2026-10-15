@@ -1,364 +1,70 @@
 extends Node3D
 
-# ============================================
-# ПЕРЕМЕННЫЕ ИГРЫ
-# ============================================
-var player: CharacterBody3D
-var camera: Camera3D
-var raycast: RayCast3D
-var held_part = null
-var parts = {}
-var slots = {}
-var case_lid_open = false
-var pc_case: Node3D
-var case_lid: MeshInstance3D
-var power_button: MeshInstance3D
+## PC Building Sim — Главный координатор игры
+## Делегирует ответственность специализированным менеджерам в scripts/managers/, scripts/ui/, scripts/audio/.
+
+# ============================================================
+# МЕНЕДЖЕРЫ И ПОДСИСТЕМЫ
+# ============================================================
+var boot_mgr: BootManager = null
+var hud_mgr: HUDManager = null
+var guided_mgr: GuidedStepsManager = null
+var tools_mgr: ToolsManager = null
+var parts_mgr: PartsManager = null
+var world_builder: WorldBuilder3D = null
+var camera_ctrl: CameraController = null
+var power_mgr: PowerManager = null
+var peripherals_mgr: PeripheralsManager = null
+var audio_mgr: AudioManager = null
+var tips_mgr: TipsManager = null
+var wiring_mgr: WiringManager = null
+var main_menu_ui: MainMenuUI = null
+var quiz_ui: QuizUI = null
+var victory_ui: VictoryUI = null
+var glossary_ui: GlossaryUI = null
+var configurator_panel: ConfiguratorUI = null
+
+# ============================================================
+# СОСТОЯНИЕ 3D-СЦЕНЫ И КОМПОНЕНТОВ
+# ============================================================
+var player: CharacterBody3D = null
+var camera: Camera3D = null
+var raycast: RayCast3D = null
+var pc_case: Node3D = null
+var case_lid: MeshInstance3D = null
+var case_lid_open: bool = false
+var power_button: MeshInstance3D = null
+var motherboard_node: Node3D = null
+var motherboard_installed: bool = false
+var held_part: Node3D = null
+var parts: Dictionary = {}
+var slots: Dictionary = {}
+
 var monitor_node: Node3D = null
-var monitor_screen: MeshInstance3D
+var monitor_screen: MeshInstance3D = null
 var monitor_viewport: SubViewport = null
 var monitor_ui_root: Control = null
 var windows_sim: WindowsSimulator = null
-var monitor_state: String:
-	get:
-		return windows_sim.current_state if windows_sim else "off"
-	set(val):
-		if windows_sim:
-			windows_sim.current_state = val
 var monitor_action_cb: Callable = Callable()
 
-# ============================================
-# ЗАПУСК И ДИАГНОСТИКА ПК (ДЕЛЕГИРОВАНО В BOOT_MANAGER)
-# ============================================
-const BootManagerScript = preload("res://scripts/managers/boot_manager.gd")
-var boot_mgr = null
-
-var pc_booted: bool:
-	get: return boot_mgr.pc_booted if boot_mgr else false
-	set(val): if boot_mgr: boot_mgr.pc_booted = val
-
-var is_booting: bool:
-	get: return boot_mgr.is_booting if boot_mgr else false
-	set(val): if boot_mgr: boot_mgr.is_booting = val
-
-# ============================================
-# ИНТЕРФЕЙС И ОВЕРЛЕИ (ДЕЛЕГИРОВАНО В HUD_MANAGER)
-# ============================================
-const HUDManagerScript = preload("res://scripts/ui/hud_manager.gd")
-var hud_mgr = null
-
-var timer_label: Label:
-	get: return hud_mgr.timer_label if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.timer_label = val
-
-var score_label: Label:
-	get: return hud_mgr.score_label if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.score_label = val
-
-var step_label: Label:
-	get: return hud_mgr.step_label if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.step_label = val
-
-var info_card: PanelContainer:
-	get: return hud_mgr.info_card if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.info_card = val
-
-var info_label: Label:
-	get: return hud_mgr.info_label if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.info_label = val
-
-var message_label: Label:
-	get: return hud_mgr.message_label if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.message_label = val
-
-var message_timer: float:
-	get: return hud_mgr.message_timer if hud_mgr else 0.0
-	set(val): if hud_mgr: hud_mgr.message_timer = val
-
-var motherboard_node: Node3D = null
-var motherboard_installed = false
-
-# ============================================
-# МЕНЮ И РЕЖИМЫ (ДЕЛЕГИРОВАНО В MAIN_MENU_UI)
-# ============================================
-const MainMenuUIScript = preload("res://scripts/ui/main_menu_ui.gd")
-var main_menu_ui = null
-
-var main_menu: Node:
-	get: return main_menu_ui if is_instance_valid(main_menu_ui) else null
-	set(val): main_menu_ui = val
-
-var name_input_ref: LineEdit:
-	get:
-		if is_instance_valid(main_menu_ui) and is_instance_valid(main_menu_ui.name_input_ref):
-			return main_menu_ui.name_input_ref
-		return null
-
-var current_mode = "free"  # free, guided, test, mistakes
-var game_started = false
-
-# ============================================
-# ПОШАГОВОЕ ОБУЧЕНИЕ И ОЧКИ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
-# ============================================
-const GuidedStepsManagerScript = preload("res://scripts/managers/guided_steps_manager.gd")
-var guided_mgr = null
-
-var guided_steps: Array:
-	get: return guided_mgr.guided_steps if guided_mgr else []
-	set(val): if guided_mgr: guided_mgr.guided_steps = val
-
-var current_step: int:
-	get: return guided_mgr.current_step if guided_mgr else 0
-	set(val): if guided_mgr: guided_mgr.current_step = val
-
-var score: int:
-	get: return guided_mgr.score if guided_mgr else 100
-	set(val): if guided_mgr: guided_mgr.score = val
-
-var mistakes: int:
-	get: return guided_mgr.mistakes if guided_mgr else 0
-	set(val): if guided_mgr: guided_mgr.mistakes = val
-
-# Таймер
-var build_start_time = 0.0
-var build_end_time = 0.0
-var timer_active = false
-
-# ============================================
-# ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
-# ============================================
-const QuizUIScript = preload("res://scripts/ui/quiz_ui.gd")
-var quiz_ui = null
-
-var current_question: int:
-	get: return quiz_ui.current_question if is_instance_valid(quiz_ui) else 0
-	set(val):
-		if is_instance_valid(quiz_ui): quiz_ui.current_question = val
-
-var test_score: int:
-	get: return quiz_ui.test_score if is_instance_valid(quiz_ui) else 0
-	set(val):
-		if is_instance_valid(quiz_ui): quiz_ui.test_score = val
-
-var test_panel: Control:
-	get: return quiz_ui.test_panel if is_instance_valid(quiz_ui) else null
-
-var test_canvas: CanvasLayer:
-	get: return quiz_ui if is_instance_valid(quiz_ui) else null
-
-# Экраны победы и сертификата
-const VictoryUIScript = preload("res://scripts/ui/victory_ui.gd")
-var victory_ui = null
-var certificate_panel: Control:
-	get:
-		if is_instance_valid(victory_ui) and is_instance_valid(victory_ui.certificate_panel):
-			return victory_ui.certificate_panel
-		return null
-var player_name = "Сборщик"
-
-# ============================================
-# ИНСТРУМЕНТЫ (ДЕЛЕГИРОВАНО В TOOLS_MANAGER)
-# ============================================
-const ToolsManagerScript = preload("res://scripts/managers/tools_manager.gd")
-var tools_mgr = null
-
-# ============================================
-# ДЕТАЛИ И СЛОТЫ (ДЕЛЕГИРОВАНО В PARTS_MANAGER)
-# ============================================
-const PartsManagerScript = preload("res://scripts/managers/parts_manager.gd")
-var parts_mgr = null
-
-# ============================================
-# ГЕНЕРАЦИЯ 3D-СЦЕНЫ (ДЕЛЕГИРОВАНО В WORLD_BUILDER_3D)
-# ============================================
-const WorldBuilder3DScript = preload("res://scripts/managers/world_builder_3d.gd")
-var world_builder = null
-
-# ============================================
-# УПРАВЛЕНИЕ КАМЕРОЙ И ИГРОКОМ (ДЕЛЕГИРОВАНО В CAMERA_CONTROLLER)
-# ============================================
-const CameraControllerScript = preload("res://scripts/managers/camera_controller.gd")
-var camera_ctrl = null
-
-var mouse_sensitivity: float:
-	get: return camera_ctrl.mouse_sensitivity if camera_ctrl else 0.002
-	set(val): if camera_ctrl: camera_ctrl.mouse_sensitivity = val
-
-var target_fov: float:
-	get: return camera_ctrl.target_fov if camera_ctrl else 75.0
-	set(val): if camera_ctrl: camera_ctrl.target_fov = val
-
-var current_fov: float:
-	get: return camera_ctrl.current_fov if camera_ctrl else 75.0
-	set(val): if camera_ctrl: camera_ctrl.current_fov = val
-
-var zoom_speed: float:
-	get: return camera_ctrl.zoom_speed if camera_ctrl else 0.15
-	set(val): if camera_ctrl: camera_ctrl.zoom_speed = val
-
-var min_fov: float:
-	get: return camera_ctrl.min_fov if camera_ctrl else 18.0
-	set(val): if camera_ctrl: camera_ctrl.min_fov = val
-
-var max_fov: float:
-	get: return camera_ctrl.max_fov if camera_ctrl else 110.0
-	set(val): if camera_ctrl: camera_ctrl.max_fov = val
-
-var monitor_camera_focused: bool:
-	get: return camera_ctrl.monitor_camera_focused if camera_ctrl else false
-	set(val): if camera_ctrl: camera_ctrl.monitor_camera_focused = val
-
-var tool_held: String:
-	get: return tools_mgr.tool_held if tools_mgr else ""
-	set(val): if tools_mgr: tools_mgr.tool_held = val
-
-var thermal_paste_applied: bool:
-	get: return tools_mgr.thermal_paste_applied if tools_mgr else false
-	set(val): if tools_mgr: tools_mgr.thermal_paste_applied = val
-
-var mb_screwed: bool:
-	get: return tools_mgr.mb_screwed if tools_mgr else false
-	set(val): if tools_mgr: tools_mgr.mb_screwed = val
-
-var screw_count: int:
-	get: return tools_mgr.screw_count if tools_mgr else 0
-	set(val): if tools_mgr: tools_mgr.screw_count = val
-
-var screwdriver_node: Node3D:
-	get: return tools_mgr.screwdriver_node if tools_mgr else null
-	set(val): if tools_mgr: tools_mgr.screwdriver_node = val
-
-var thermal_paste_node: Node3D:
-	get: return tools_mgr.thermal_paste_node if tools_mgr else null
-	set(val): if tools_mgr: tools_mgr.thermal_paste_node = val
-
-var tool_indicator: Label:
-	get: return hud_mgr.tool_indicator if hud_mgr else null
-	set(val): if hud_mgr: hud_mgr.tool_indicator = val
-
-# ============================================
-# ЭЛЕКТРОСЕТЬ 220V И ТУМБЛЕР БП (ДЕЛЕГИРОВАНО В POWER_MANAGER)
-# ============================================
-const PowerManagerScript = preload("res://scripts/managers/power_manager.gd")
-var power_mgr = null
-
-var psu_switch_on: bool:
-	get: return power_mgr.psu_switch_on if power_mgr else false
-	set(val): if power_mgr: power_mgr.psu_switch_on = val
-
-var psu_cable_plugged: bool:
-	get: return power_mgr.psu_cable_plugged if power_mgr else false
-	set(val): if power_mgr: power_mgr.psu_cable_plugged = val
-
-var power_strip_node: Node3D:
-	get: return power_mgr.power_strip_node if power_mgr else null
-	set(val): if power_mgr: power_mgr.power_strip_node = val
-
-var psu_cable_node: Node3D:
-	get: return power_mgr.psu_cable_node if power_mgr else null
-	set(val): if power_mgr: power_mgr.psu_cable_node = val
-
-var psu_switch_paddle: Node3D:
-	get: return power_mgr.psu_switch_paddle if power_mgr else null
-	set(val): if power_mgr: power_mgr.psu_switch_paddle = val
-
-var psu_switch_label: Label3D:
-	get: return power_mgr.psu_switch_label if power_mgr else null
-	set(val): if power_mgr: power_mgr.psu_switch_label = val
-
-var psu_side_lbl: Label3D:
-	get: return power_mgr.psu_side_lbl if power_mgr else null
-	set(val): if power_mgr: power_mgr.psu_side_lbl = val
-
-var psu_front_switch_paddle: Node3D:
-	get: return power_mgr.psu_front_switch_paddle if power_mgr else null
-	set(val): if power_mgr: power_mgr.psu_front_switch_paddle = val
-
-var psu_front_switch_label: Label3D:
-	get: return power_mgr.psu_front_switch_label if power_mgr else null
-	set(val): if power_mgr: power_mgr.psu_front_switch_label = val
-
-# ============================================
-# АУДИОСИСТЕМА (ДЕЛЕГИРОВАНО В AUDIO_MANAGER)
-# ============================================
-const AudioManagerScript = preload("res://scripts/audio/audio_manager.gd")
-var audio_mgr = null
-
-var pc_fan_player: AudioStreamPlayer:
-	get: return audio_mgr.pc_fan_player if audio_mgr else null
-	set(val): if audio_mgr: audio_mgr.pc_fan_player = val
-
-var pc_fan_stream: AudioStreamWAV:
-	get: return audio_mgr.pc_fan_stream if audio_mgr else null
-	set(val): if audio_mgr: audio_mgr.pc_fan_stream = val
-
-
-# ============================================
-# ВНЕШНЯЯ ПЕРИФЕРИЯ (ДЕЛЕГИРОВАНО В PERIPHERALS_MANAGER)
-# ============================================
-const PeripheralsManagerScript = preload("res://scripts/managers/peripherals_manager.gd")
-var peripherals_mgr = null
-
-var hdmi_cable_connected: bool:
-	get: return peripherals_mgr.hdmi_cable_connected if peripherals_mgr else false
-	set(val): if peripherals_mgr: peripherals_mgr.hdmi_cable_connected = val
-
-var hdmi_cable_node: Node3D:
-	get: return peripherals_mgr.hdmi_cable_node if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.hdmi_cable_node = val
-
-var hdmi_line_root: Node3D:
-	get: return peripherals_mgr.hdmi_line_root if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.hdmi_line_root = val
-
-var usb_drive_plugged: bool:
-	get: return peripherals_mgr.usb_drive_plugged if peripherals_mgr else false
-	set(val): if peripherals_mgr: peripherals_mgr.usb_drive_plugged = val
-
-var usb_flash_node: Node3D:
-	get: return peripherals_mgr.usb_flash_node if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.usb_flash_node = val
-
-var usb_front_plugged_node: Node3D:
-	get: return peripherals_mgr.usb_front_plugged_node if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.usb_front_plugged_node = val
-
-var usb_led_tween: Tween:
-	get: return peripherals_mgr.usb_led_tween if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.usb_led_tween = val
-
-var key6_node: Node3D:
-	get: return peripherals_mgr.key6_node if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.key6_node = val
-
-var key7_node: Node3D:
-	get: return peripherals_mgr.key7_node if peripherals_mgr else null
-	set(val): if peripherals_mgr: peripherals_mgr.key7_node = val
-
-var windows_installed = false         # Установлена ли ОС Windows
-var is_installing_windows: bool:
-	get:
-		return windows_sim.is_installing if windows_sim else false
-	set(val):
-		if windows_sim:
-			windows_sim.is_installing = val
-
-# ============================================
-# РИКРОЛЛ
-# ============================================
-var rickroll_active: bool:
-	get:
-		return windows_sim.rickroll_active if windows_sim else false
-	set(val):
-		if windows_sim:
-			windows_sim.rickroll_active = val
-var rickroll_overlay: CanvasLayer = null
-
-# ============================================
-# SPEEDRUN РЕЖИМ (СБОРКА НА ВРЕМЯ)
-# ============================================
-var speedrun_panel: Control = null
-var speedrun_rank_label: Label = null
-var speedrun_records = [
+var psu_side_lbl: Label3D = null
+var psu_front_switch_paddle: Node3D = null
+var psu_front_switch_label: Label3D = null
+
+# ============================================================
+# ИГРОВОЙ ПРОЦЕСС И РЕЖИМЫ
+# ============================================================
+var current_mode: String = "free"  # free, guided, test, speedrun
+var game_started: bool = false
+var player_name: String = "Сборщик"
+var build_start_time: float = 0.0
+var build_end_time: float = 0.0
+var timer_active: bool = false
+var install_anim_enabled: bool = true
+var case_fan_orientation: String = "exhaust"
+var windows_installed: bool = false
+
+var speedrun_records: Array = [
 	{"name": "CyberPro_99", "time": 76.2, "rank": "Золото"},
 	{"name": "Linus_Master", "time": 88.5, "rank": "Золото"},
 	{"name": "HardwareGeek", "time": 114.0, "rank": "Серебро"},
@@ -366,79 +72,7 @@ var speedrun_records = [
 	{"name": "PC_Enthusiast", "time": 192.4, "rank": "Бронза"}
 ]
 
-# ============================================
-# СОВЕТЫ И ПАСХАЛКИ (ДЕЛЕГИРОВАНО В TIPS_MANAGER)
-# ============================================
-const TipsManagerScript = preload("res://scripts/managers/tips_manager.gd")
-var tips_mgr = null
-
-var tip_timer: float:
-	get: return tips_mgr.tip_timer if tips_mgr else 0.0
-	set(val): if tips_mgr: tips_mgr.tip_timer = val
-
-var tip_interval: float:
-	get: return tips_mgr.tip_interval if tips_mgr else 35.0
-	set(val): if tips_mgr: tips_mgr.tip_interval = val
-
-var tip_label: Label:
-	get: return tips_mgr.tip_label if tips_mgr else null
-	set(val): if tips_mgr: tips_mgr.tip_label = val
-
-var tip_panel: Control:
-	get: return tips_mgr.tip_panel if tips_mgr else null
-	set(val): if tips_mgr: tips_mgr.tip_panel = val
-
-var tip_visible: bool:
-	get: return tips_mgr.tip_visible if tips_mgr else false
-	set(val): if tips_mgr: tips_mgr.tip_visible = val
-
-var tip_display_timer: float:
-	get: return tips_mgr.tip_display_timer if tips_mgr else 0.0
-	set(val): if tips_mgr: tips_mgr.tip_display_timer = val
-
-var konami_buffer: Array:
-	get: return tips_mgr.konami_buffer if tips_mgr else []
-	set(val): if tips_mgr: tips_mgr.konami_buffer = val
-
-var konami_code: Array:
-	get: return tips_mgr.konami_code if tips_mgr else []
-	set(val): if tips_mgr: tips_mgr.konami_code = val
-
-var easter_egg_activated: bool:
-	get: return tips_mgr.easter_egg_activated if tips_mgr else false
-	set(val): if tips_mgr: tips_mgr.easter_egg_activated = val
-
-# ============================================
-# ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ДЕЛЕГИРОВАНО В GLOSSARY_UI)
-# ============================================
-const GlossaryUIScript = preload("res://scripts/ui/glossary_ui.gd")
-var glossary_ui = null
-
-var glossary_open: bool:
-	get: return glossary_ui.is_open if is_instance_valid(glossary_ui) else false
-	set(val):
-		if is_instance_valid(glossary_ui):
-			if val: glossary_ui.open()
-			else: glossary_ui.close()
-
-var current_guide_tab: String:
-	get: return glossary_ui.current_tab if is_instance_valid(glossary_ui) else "glossary"
-	set(val):
-		if is_instance_valid(glossary_ui): glossary_ui.current_tab = val
-
-var glossary_panel: Control:
-	get: return glossary_ui.glossary_panel if is_instance_valid(glossary_ui) else null
-
-var glossary_canvas: CanvasLayer:
-	get: return glossary_ui if is_instance_valid(glossary_ui) else null
-
-
-
-# ============================================
-# КОНФИГУРАТОР
-# ============================================
-var configurator_panel: Control = null
-var selected_config = {
+var selected_config: Dictionary = {
 	"mb":      {"id":"motherboard","name":"ASUS PRIME Z790-P", "socket":"LGA1700", "ram_type":"DDR5", "price":210, "color":Color(0.04,0.28,0.12)},
 	"cpu":     {"id":"cpu",    "name":"Intel Core i5-13600K", "socket":"LGA1700", "tdp":125, "price":350, "color":Color(0.75,0.75,0.8)},
 	"cooler":  {"id":"cooler","name":"Noctua NH-D15",        "socket":"LGA1700", "tdp":250, "price":110, "color":Color(0.55,0.5,0.45)},
@@ -449,107 +83,196 @@ var selected_config = {
 	"psu":     {"id":"psu_750","name":"Corsair RM750e 750W", "wattage":750, "price":120, "color":Color(0.12,0.13,0.16), "tag":"80+ Gold"}
 }
 
+# ============================================================
+# ДЕЛЕГИРУЕМЫЕ СВОЙСТВА (ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ)
+# ============================================================
+var pc_booted: bool:
+	get: return boot_mgr.pc_booted if boot_mgr else false
+	set(v): if boot_mgr: boot_mgr.pc_booted = v
 
-# ============================================
-# ФИЗИЧЕСКИЕ ПРОВОДА И ПОДКЛЮЧЕНИЕ В 3D (ДЕЛЕГИРОВАНО В WIRING_MANAGER)
-# ============================================
-const WiringManagerScript = preload("res://scripts/managers/wiring_manager.gd")
-var wiring_mgr = null
+var is_booting: bool:
+	get: return boot_mgr.is_booting if boot_mgr else false
+	set(v): if boot_mgr: boot_mgr.is_booting = v
+
+var score: int:
+	get: return guided_mgr.score if guided_mgr else 100
+	set(v): if guided_mgr: guided_mgr.score = v
+
+var mistakes: int:
+	get: return guided_mgr.mistakes if guided_mgr else 0
+	set(v): if guided_mgr: guided_mgr.mistakes = v
+
+var guided_steps: Array:
+	get: return guided_mgr.guided_steps if guided_mgr else []
+	set(v): if guided_mgr: guided_mgr.guided_steps = v
+
+var current_step: int:
+	get: return guided_mgr.current_step if guided_mgr else 0
+	set(v): if guided_mgr: guided_mgr.current_step = v
+
+var tool_held: String:
+	get: return tools_mgr.tool_held if tools_mgr else ""
+	set(v): if tools_mgr: tools_mgr.tool_held = v
+
+var thermal_paste_applied: bool:
+	get: return tools_mgr.thermal_paste_applied if tools_mgr else false
+	set(v): if tools_mgr: tools_mgr.thermal_paste_applied = v
+
+var mb_screwed: bool:
+	get: return tools_mgr.mb_screwed if tools_mgr else false
+	set(v): if tools_mgr: tools_mgr.mb_screwed = v
+
+var screw_count: int:
+	get: return tools_mgr.screw_count if tools_mgr else 0
+	set(v): if tools_mgr: tools_mgr.screw_count = v
+
+var screwdriver_node: Node3D:
+	get: return tools_mgr.screwdriver_node if tools_mgr else null
+	set(v): if tools_mgr: tools_mgr.screwdriver_node = v
+
+var thermal_paste_node: Node3D:
+	get: return tools_mgr.thermal_paste_node if tools_mgr else null
+	set(v): if tools_mgr: tools_mgr.thermal_paste_node = v
+
+var psu_switch_on: bool:
+	get: return power_mgr.psu_switch_on if power_mgr else false
+	set(v): if power_mgr: power_mgr.psu_switch_on = v
+
+var psu_cable_plugged: bool:
+	get: return power_mgr.psu_cable_plugged if power_mgr else false
+	set(v): if power_mgr: power_mgr.psu_cable_plugged = v
+
+var hdmi_cable_connected: bool:
+	get: return peripherals_mgr.hdmi_cable_connected if peripherals_mgr else false
+	set(v): if peripherals_mgr: peripherals_mgr.hdmi_cable_connected = v
+
+var usb_drive_plugged: bool:
+	get: return peripherals_mgr.usb_drive_plugged if peripherals_mgr else false
+	set(v): if peripherals_mgr: peripherals_mgr.usb_drive_plugged = v
 
 var in_wiring_mode: bool:
 	get: return wiring_mgr.in_wiring_mode if wiring_mgr else false
-	set(val): if wiring_mgr: wiring_mgr.in_wiring_mode = val
-
-var connected_wires: Dictionary:
-	get: return wiring_mgr.connected_wires if wiring_mgr else {}
-	set(val): if wiring_mgr: wiring_mgr.connected_wires = val
+	set(v): if wiring_mgr: wiring_mgr.in_wiring_mode = v
 
 var wire_done: bool:
 	get: return wiring_mgr.wire_done if wiring_mgr else false
-	set(val): if wiring_mgr: wiring_mgr.wire_done = val
+	set(v): if wiring_mgr: wiring_mgr.wire_done = v
 
-var held_wire_id: String:
-	get: return wiring_mgr.held_wire_id if wiring_mgr else ""
-	set(val): if wiring_mgr: wiring_mgr.held_wire_id = val
+var connected_wires: Dictionary:
+	get: return wiring_mgr.connected_wires if wiring_mgr else {}
+	set(v): if wiring_mgr: wiring_mgr.connected_wires = v
 
-var physical_wire_nodes: Array:
-	get: return wiring_mgr.physical_wire_nodes if wiring_mgr else []
-	set(val): if wiring_mgr: wiring_mgr.physical_wire_nodes = val
+var monitor_state: String:
+	get: return windows_sim.current_state if windows_sim else "off"
+	set(v): if windows_sim: windows_sim.current_state = v
 
-var loose_wire_nodes: Dictionary:
-	get: return wiring_mgr.loose_wire_nodes if wiring_mgr else {}
-	set(val): if wiring_mgr: wiring_mgr.loose_wire_nodes = val
+var rickroll_active: bool:
+	get: return windows_sim.rickroll_active if windows_sim else false
+	set(v): if windows_sim: windows_sim.rickroll_active = v
 
-var wire_socket_nodes: Dictionary:
-	get: return wiring_mgr.wire_socket_nodes if wiring_mgr else {}
-	set(val): if wiring_mgr: wiring_mgr.wire_socket_nodes = val
+var target_fov: float:
+	get: return camera_ctrl.target_fov if camera_ctrl else 75.0
+	set(v): if camera_ctrl: camera_ctrl.target_fov = v
 
+var monitor_camera_focused: bool:
+	get: return camera_ctrl.monitor_camera_focused if camera_ctrl else false
+	set(v): if camera_ctrl: camera_ctrl.monitor_camera_focused = v
 
-# ============================================
-# АНИМАЦИИ И НАСТРОЙКИ
-# ============================================
-var install_anim_enabled = true
-var case_fan_orientation = "exhaust" # "exhaust" (выдув назад - норма) или "intake" (вдув внутрь - ошибка)
+var glossary_open: bool:
+	get: return glossary_ui.is_open if is_instance_valid(glossary_ui) else false
+	set(v):
+		if is_instance_valid(glossary_ui):
+			if v: glossary_ui.open()
+			else: glossary_ui.close()
 
-# ============================================
-# ИНИЦИАЛИЗАЦИЯ
-# ============================================
-func _ready():
+var step_label: Label:
+	get: return hud_mgr.step_label if hud_mgr else null
+	set(v): if hud_mgr: hud_mgr.step_label = v
+
+var tool_indicator: Label:
+	get: return hud_mgr.tool_indicator if hud_mgr else null
+	set(v): if hud_mgr: hud_mgr.tool_indicator = v
+
+var tip_panel: Control:
+	get: return tips_mgr.tip_panel if tips_mgr else null
+	set(v): if tips_mgr: tips_mgr.tip_panel = v
+
+# ============================================================
+# ЖИЗНЕННЫЙ ЦИКЛ (LIFECYCLE)
+# ============================================================
+func _ready() -> void:
 	randomize()
 	DisplayServer.window_set_size(Vector2i(1280, 720))
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_title("PC Building Sim — Симулятор сборки ПК")
-	wiring_mgr = WiringManagerScript.new()
+
+	_init_managers()
+	build_main_menu()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+func _init_managers() -> void:
+	wiring_mgr = WiringManager.new()
 	wiring_mgr.name = "WiringManager"
 	wiring_mgr.setup(self)
 	add_child(wiring_mgr)
-	wiring_mgr.wiring_completed.connect(_on_wiring_completed)
-	peripherals_mgr = PeripheralsManagerScript.new()
+
+	peripherals_mgr = PeripheralsManager.new()
 	peripherals_mgr.name = "PeripheralsManager"
 	peripherals_mgr.setup(self)
 	add_child(peripherals_mgr)
-	power_mgr = PowerManagerScript.new()
+
+	power_mgr = PowerManager.new()
 	power_mgr.name = "PowerManager"
 	power_mgr.setup(self)
 	add_child(power_mgr)
-	boot_mgr = BootManagerScript.new()
+
+	boot_mgr = BootManager.new()
 	boot_mgr.name = "BootManager"
 	boot_mgr.setup(self)
 	add_child(boot_mgr)
-	audio_mgr = AudioManagerScript.new()
+
+	audio_mgr = AudioManager.new()
 	audio_mgr.name = "AudioManager"
 	audio_mgr.setup(self)
 	add_child(audio_mgr)
-	hud_mgr = HUDManagerScript.new()
+
+	hud_mgr = HUDManager.new()
 	hud_mgr.name = "HUDManager"
 	hud_mgr.setup(self)
 	add_child(hud_mgr)
-	tips_mgr = TipsManagerScript.new()
+
+	tips_mgr = TipsManager.new()
 	tips_mgr.name = "TipsManager"
 	tips_mgr.setup(self)
 	add_child(tips_mgr)
-	guided_mgr = GuidedStepsManagerScript.new()
+
+	guided_mgr = GuidedStepsManager.new()
 	guided_mgr.name = "GuidedStepsManager"
 	guided_mgr.setup(self)
 	add_child(guided_mgr)
-	tools_mgr = ToolsManagerScript.new()
+
+	tools_mgr = ToolsManager.new()
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
 	add_child(tools_mgr)
-	parts_mgr = PartsManagerScript.new()
+
+	parts_mgr = PartsManager.new()
 	parts_mgr.name = "PartsManager"
 	parts_mgr.setup(self)
 	add_child(parts_mgr)
-	world_builder = WorldBuilder3DScript.new()
+
+	world_builder = WorldBuilder3D.new()
 	world_builder.name = "WorldBuilder3D"
 	world_builder.setup(self)
 	add_child(world_builder)
-	camera_ctrl = CameraControllerScript.new()
+
+	camera_ctrl = CameraController.new()
 	camera_ctrl.name = "CameraController"
 	camera_ctrl.setup(self)
 	add_child(camera_ctrl)
 
-	# Синхронизация пошагового режима при внешних изменениях состояния
+	# Синхронизация состояния пошагового режима при внешних событиях
+	wiring_mgr.wiring_completed.connect(_on_wiring_completed)
 	wiring_mgr.cable_disconnected.connect(func(_id): if guided_mgr: guided_mgr.recalculate_current_step())
 	tools_mgr.motherboard_screwed_state_changed.connect(func(_sc, _cnt): if guided_mgr: guided_mgr.recalculate_current_step())
 	tools_mgr.thermal_paste_applied_state_changed.connect(func(_appl): if guided_mgr: guided_mgr.recalculate_current_step())
@@ -558,716 +281,53 @@ func _ready():
 	peripherals_mgr.hdmi_state_changed.connect(func(_conn): if guided_mgr: guided_mgr.recalculate_current_step())
 	peripherals_mgr.usb_state_changed.connect(func(_plugged): if guided_mgr: guided_mgr.recalculate_current_step())
 
-	build_main_menu()
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+func _physics_process(delta: float) -> void:
+	if not game_started: return
+	if camera_ctrl: camera_ctrl.process_movement(delta)
+	if parts_mgr: parts_mgr.update_slot_highlights()
+	if hud_mgr: hud_mgr.update_info_card()
 
-# ============================================
-# ГЛАВНОЕ МЕНЮ (ДЕЛЕГИРОВАНО В MAIN_MENU_UI)
-# ============================================
-func build_main_menu():
+func _process(delta: float) -> void:
+	if not game_started: return
+	if camera_ctrl: camera_ctrl.process_camera_zoom(delta)
+	if boot_mgr: boot_mgr.animate_fans(delta)
+	if hud_mgr: hud_mgr.process_hud(delta)
+	if not glossary_open and tips_mgr: tips_mgr.process_tips(delta)
+
+# ============================================================
+# ГЛАВНОЕ МЕНЮ И ЗАПУСК РЕЖИМОВ
+# ============================================================
+func build_main_menu() -> void:
 	if main_menu_ui and is_instance_valid(main_menu_ui):
 		main_menu_ui.queue_free()
 	var old_menu = get_node_or_null("MainMenuCanvas")
 	if old_menu: old_menu.queue_free()
 
-	main_menu_ui = MainMenuUIScript.new()
+	main_menu_ui = MainMenuUI.new()
 	add_child(main_menu_ui)
 	main_menu_ui.mode_selected.connect(_on_menu_mode_selected)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
-func _on_menu_mode_selected(mode: String, p_name: String):
+func _on_menu_mode_selected(mode: String, p_name: String) -> void:
 	if not p_name.is_empty():
 		player_name = p_name
 	start_mode(mode)
 
-func start_mode(mode):
+func start_mode(mode: String) -> void:
 	current_mode = mode
 	if main_menu_ui and is_instance_valid(main_menu_ui):
 		var p_name = main_menu_ui.get_player_name()
 		if not p_name.is_empty():
 			player_name = p_name
-	elif name_input_ref:
-		player_name = name_input_ref.text.strip_edges()
 	if player_name.is_empty():
 		player_name = "Сборщик"
-	# Конфигуратор перед игрой (в режимах свободной сборки, обучения и на время)
+
 	if mode in ["free", "guided", "speedrun"]:
 		show_configurator(mode)
 	else:
 		_launch_game(mode)
 
-func _launch_game(mode: String):
-	if main_menu_ui and is_instance_valid(main_menu_ui):
-		main_menu_ui.queue_free()
-		main_menu_ui = null
-	if configurator_panel and is_instance_valid(configurator_panel):
-		configurator_panel.queue_free()
-		configurator_panel = null
-	var old_cfg = get_node_or_null("ConfiguratorCanvas")
-	if old_cfg: old_cfg.queue_free()
-	game_started = true
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-
-	build_room()
-	build_workbench()
-	build_pc_case()
-	build_motherboard()
-	build_parts_on_table()
-	build_tools_on_table()
-	build_power_strip_and_cable()
-	build_player()
-	build_monitor()
-	build_meme_keyboard()
-	build_hdmi_system()
-	build_usb_flash_drive()
-	build_message_ui()
-	build_crosshair()
-	build_hud()
-	build_tip_panel()
-	build_glossary_panel()
-	_init_pc_fan_sound()
-
-	if mode == "guided":
-		current_step = 0
-		show_step_hint()
-	elif mode == "speedrun":
-		timer_active = true
-		build_start_time = Time.get_ticks_msec()
-		show_message("СБОРКА НА ВРЕМЯ (SPEEDRUN) НАЧАЛАСЬ!\nЗолото < 1:30  |  Серебро < 2:30  |  Бронза < 4:00")
-	elif mode == "test":
-		show_test()
-
-# ============================================
-# HUD И ПРИЦЕЛ (ДЕЛЕГИРОВАНО В HUD_MANAGER)
-# ============================================
-func build_hud():
-	if hud_mgr: hud_mgr.build_hud()
-
-func build_crosshair():
-	if hud_mgr: hud_mgr.build_crosshair()
-
-# ============================================
-# КОМНАТА, ВЕРСТАК И КОРПУС ПК (ДЕЛЕГИРОВАНО В WORLD_BUILDER_3D)
-# ============================================
-func build_room():
-	if world_builder: world_builder.build_room()
-
-func build_wall(size, pos):
-	if world_builder: world_builder.build_wall(size, pos)
-
-func build_workbench():
-	if world_builder: world_builder.build_workbench()
-
-func build_pc_case():
-	if world_builder: world_builder.build_pc_case()
-
-# ============================================
-# СИСТЕМА ПИТАНИЯ 220V И ТУМБЛЕР БП (ДЕЛЕГИРОВАНО В POWER_MANAGER)
-# ============================================
-func build_psu_rear_controls():
-	if power_mgr: power_mgr.build_psu_rear_controls()
-
-func _update_psu_switch_visual():
-	if power_mgr: power_mgr.update_psu_switch_visual()
-
-func build_power_strip_and_cable():
-	if power_mgr: power_mgr.build_power_strip_and_cable()
-
-func _update_psu_cable_visual():
-	if power_mgr: power_mgr.update_psu_cable_visual()
-
-func toggle_psu_switch():
-	if power_mgr: power_mgr.toggle_psu_switch()
-
-func toggle_psu_cable():
-	if power_mgr: power_mgr.toggle_psu_cable()
-
-func shutdown_pc_emergency(reason: String):
-	if boot_mgr: boot_mgr.shutdown_pc_emergency(reason)
-
-func _is_psu_switch(collider) -> bool:
-	return power_mgr.is_psu_switch(collider) if power_mgr else false
-
-func _is_psu_cable_or_socket(collider) -> bool:
-	return power_mgr.is_psu_cable_or_socket(collider) if power_mgr else false
-
-func _is_power_strip(collider) -> bool:
-	return power_mgr.is_power_strip(collider) if power_mgr else false
-
-func try_interact_power() -> bool:
-	return power_mgr.try_interact_power() if power_mgr else false
-
-
-# ============================================
-# МАТЕРИНСКАЯ ПЛАТА, СЛОТЫ И ДЕТАЛИ (ДЕЛЕГИРОВАНО В WORLD_BUILDER_3D)
-# ============================================
-func build_motherboard():
-	if world_builder: world_builder.build_motherboard()
-
-func create_slot_on(id, pos, size, type, parent):
-	if world_builder: world_builder.create_slot_on(id, pos, size, type, parent)
-
-func create_slot(id, pos, size, type):
-	if world_builder: world_builder.create_slot(id, pos, size, type)
-
-func build_parts_on_table():
-	if world_builder: world_builder.build_parts_on_table()
-
-func create_part(id, part_name, size, pos, color, type, compat=""):
-	if world_builder: world_builder.create_part(id, part_name, size, pos, color, type, compat)
-
-# ============================================
-# ИНСТРУМЕНТЫ (отвёртка + термопаста) (ДЕЛЕГИРОВАНО В TOOLS_MANAGER)
-# ============================================
-func build_tools_on_table():
-	if tools_mgr: tools_mgr.build_tools_on_table()
-
-# ============================================
-# ИГРОК И МОНИТОР (ДЕЛЕГИРОВАНО В WORLD_BUILDER_3D)
-# ============================================
-func build_player():
-	if world_builder: world_builder.build_player()
-
-func build_monitor():
-	if world_builder: world_builder.build_monitor()
-
-func set_monitor_screen_off():
-	if world_builder: world_builder.set_monitor_screen_off()
-
-func set_monitor_screen_no_signal():
-	if world_builder: world_builder.set_monitor_screen_no_signal()
-
-func set_monitor_screen_bios(lines: Array, alert_type: String = ""):
-	if world_builder: world_builder.set_monitor_screen_bios(lines, alert_type)
-
-func set_monitor_screen_desktop():
-	if world_builder: world_builder.set_monitor_screen_desktop()
-
-func _is_monitor_screen(collider) -> bool:
-	return world_builder.is_monitor_screen(collider) if world_builder else false
-
-func try_interact_monitor() -> bool:
-	return world_builder.try_interact_monitor() if world_builder else false
-
-func toggle_monitor_zoom():
-	if camera_ctrl: camera_ctrl.toggle_monitor_zoom()
-
-func build_message_ui():
-	if hud_mgr: hud_mgr.build_message_ui()
-
-# ============================================
-# СОВЕТЫ "А ТЫ ЗНАЛ?"
-# ============================================
-func build_tip_panel():
-	if tips_mgr: tips_mgr.build_tip_panel()
-
-# ============================================
-# ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ДЕЛЕГИРОВАНО В GLOSSARY_UI)
-# ============================================
-func build_glossary_panel():
-	if not glossary_ui or not is_instance_valid(glossary_ui):
-		var old = get_node_or_null("GlossaryCanvas")
-		if old: old.queue_free()
-		glossary_ui = GlossaryUIScript.new()
-		add_child(glossary_ui)
-		glossary_ui.closed.connect(_on_glossary_closed)
-
-func open_glossary(tab: String = "glossary"):
-	if not glossary_ui or not is_instance_valid(glossary_ui):
-		build_glossary_panel()
-	glossary_ui.open(tab)
-
-func close_glossary():
-	if glossary_ui:
-		glossary_ui.close()
-	_on_glossary_closed()
-
-func toggle_glossary(tab: String = "glossary"):
-	if not glossary_ui or not is_instance_valid(glossary_ui):
-		build_glossary_panel()
-	glossary_ui.toggle(tab)
-
-func switch_guide_tab(tab_name: String):
-	if glossary_ui:
-		glossary_ui.switch_tab(tab_name)
-
-func _scroll_guide(delta_y: int):
-	if glossary_ui:
-		glossary_ui.scroll(delta_y)
-
-func _on_glossary_closed():
-	if not in_wiring_mode:
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-
-# ============================================
-# HELPERS (make_box, make_box_on) (ДЕЛЕГИРОВАНО В WORLD_BUILDER_3D)
-# ============================================
-func make_box(size, pos, color) -> MeshInstance3D:
-	return world_builder.make_box(size, pos, color) if world_builder else null
-
-func make_box_on(parent, size, pos, color) -> MeshInstance3D:
-	return world_builder.make_box_on(parent, size, pos, color) if world_builder else null
-
-# ============================================
-# ЗВУКИ (ДЕЛЕГИРОВАНО В AUDIO_MANAGER)
-# ============================================
-func _gen_sound(freq: float, duration: float, env_speed: float, volume: float = 0.3):
-	if audio_mgr: audio_mgr.gen_sound(freq, duration, env_speed, volume)
-
-func play_click_sound():
-	if audio_mgr: audio_mgr.play_click_sound()
-
-func play_snap_sound():
-	if audio_mgr: audio_mgr.play_snap_sound()
-
-func play_error_sound():
-	if audio_mgr: audio_mgr.play_error_sound()
-
-func play_boot_sound():
-	if audio_mgr: audio_mgr.play_boot_sound()
-
-func play_screw_sound():
-	if audio_mgr: audio_mgr.play_screw_sound()
-
-func play_paste_sound():
-	if audio_mgr: audio_mgr.play_paste_sound()
-
-func play_beep_sound():
-	if audio_mgr: audio_mgr.play_beep_sound()
-
-func play_success_sound():
-	if audio_mgr: audio_mgr.play_success_sound()
-
-# ============================================
-# АУДИОСИСТЕМА БП И РАБОТАЮЩЕГО ПК
-# ============================================
-func play_relay_sound(is_turning_on: bool):
-	if audio_mgr: audio_mgr.play_relay_sound(is_turning_on)
-
-func play_switch_sound():
-	if audio_mgr: audio_mgr.play_switch_sound()
-
-func _init_pc_fan_sound():
-	if audio_mgr: audio_mgr.init_pc_fan_sound()
-
-func start_pc_fan_ambient():
-	if audio_mgr: audio_mgr.start_pc_fan_ambient()
-
-func stop_pc_fan_ambient():
-	if audio_mgr: audio_mgr.stop_pc_fan_ambient()
-
-
-
-# ============================================
-# ФИЗИКА И ВВОД
-# ============================================
-func _physics_process(delta):
-	if not game_started: return
-	if camera_ctrl: camera_ctrl.process_movement(delta)
-	update_slot_highlights()
-	update_info_card()
-
-func _input(event):
-	if not game_started: return
-	# Пасхалка — Konami Code
-	if tips_mgr and tips_mgr.handle_key_input(event):
-		return
-
-	if glossary_open:
-		if glossary_ui and glossary_ui.handle_input(event):
-			return
-		return
-
-	if event is InputEventMouseMotion:
-		if in_wiring_mode:
-			handle_wiring_mouse_hover(event.position)
-		elif camera_ctrl:
-			camera_ctrl.handle_mouse_motion(event.relative)
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			if camera_ctrl: camera_ctrl.zoom_in()
-		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			if camera_ctrl: camera_ctrl.zoom_out()
-		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			if in_wiring_mode:
-				drop_held_wire()
-			else:
-				drop_held_item()
-		elif event.button_index == MOUSE_BUTTON_LEFT:
-			if in_wiring_mode:
-				handle_wiring_mouse_click(event.position)
-			else:
-				interact()
-
-	if event is InputEventKey and event.pressed and not event.echo:
-		match event.keycode:
-			KEY_1:
-				if in_wiring_mode: grab_wire("mb_power")
-			KEY_2:
-				if in_wiring_mode: grab_wire("cpu_power")
-			KEY_3:
-				if in_wiring_mode: grab_wire("gpu_power")
-			KEY_4:
-				if in_wiring_mode: grab_wire("fp_power")
-			KEY_6:
-				if not in_wiring_mode: press_meme_key("6")
-			KEY_7:
-				if not in_wiring_mode: press_meme_key("7")
-			KEY_C:
-				if in_wiring_mode:
-					exit_wiring_mode()
-				else:
-					start_wiring_mode()
-			KEY_E:      interact()
-			KEY_X:
-				if in_wiring_mode:
-					drop_held_wire()
-				else:
-					drop_held_item()
-			KEY_R:      rotate_held_part()
-			KEY_P:      toggle_psu_switch()
-			KEY_F:      toggle_case_lid()
-			KEY_G:      toggle_glossary("glossary")
-			KEY_H:      toggle_glossary("mistakes")
-			KEY_O:      toggle_glossary("mistakes")
-			KEY_SPACE:
-				if in_wiring_mode:
-					if wire_done or connected_wires.size() >= 4:
-						exit_wiring_mode()
-					return
-				if windows_sim and windows_sim.handle_interaction():
-					return
-				if monitor_action_cb and monitor_action_cb.is_valid():
-					monitor_action_cb.call()
-					return
-				if not pc_booted and not is_booting:
-					var can_boot = false
-					if raycast and raycast.is_colliding():
-						var collider = raycast.get_collider()
-						if _is_power_button(collider) or _is_psu_switch(collider) or (pc_case and pc_case.is_ancestor_of(collider)):
-							can_boot = true
-					if can_boot or (player and pc_case and player.global_position.distance_to(pc_case.global_position) < 3.0):
-						try_boot_pc()
-			KEY_ENTER:
-				if windows_sim and windows_sim.handle_interaction():
-					return
-				if monitor_action_cb and monitor_action_cb.is_valid():
-					monitor_action_cb.call()
-					return
-			KEY_Z:
-				toggle_monitor_zoom()
-			KEY_ESCAPE:
-				if in_wiring_mode:
-					exit_wiring_mode()
-				elif camera_ctrl:
-					camera_ctrl.toggle_mouse_mode()
-
-func drop_held_item():
-	if in_wiring_mode:
-		drop_held_wire()
-		return
-	if tool_held != "":
-		drop_tool()
-		show_message("Положили инструмент обратно на стол")
-		play_click_sound()
-		return
-	if held_part:
-		var p_name = held_part.get_meta("name")
-		drop_part()
-		show_message("Положили %s обратно на стол" % p_name)
-		play_click_sound()
-		return
-
-func rotate_held_part():
-	if parts_mgr: parts_mgr.rotate_held_part()
-
-func _process(delta):
-	if not game_started: return
-
-	# FOV zoom
-	if camera_ctrl: camera_ctrl.process_camera_zoom(delta)
-
-	# Анимация кулеров при работе ПК
-	if boot_mgr:
-		boot_mgr.animate_fans(delta)
-
-	# Таймер сборки и скрытие сообщения HUD
-	if hud_mgr:
-		hud_mgr.process_hud(delta)
-
-	# Советы
-	if not glossary_open and tips_mgr:
-		tips_mgr.process_tips(delta)
-
-func _is_power_button(collider) -> bool:
-	if collider == power_button: return true
-	if collider and collider.name == "PowerButtonBody": return true
-	if collider and collider.get_parent() and collider.get_parent().name == "PowerButtonBody": return true
-	return false
-
-# ============================================
-# СОВЕТЫ И ПАСХАЛКИ (ДЕЛЕГИРОВАНО В TIPS_MANAGER)
-# ============================================
-func show_random_tip():
-	if tips_mgr: tips_mgr.show_random_tip()
-
-func activate_easter_egg():
-	if tips_mgr: tips_mgr.activate_easter_egg()
-
-# ============================================
-# ВЗАИМОДЕЙСТВИЕ
-# ============================================
-func interact():
-	if in_wiring_mode:
-		var center_pt = get_viewport().get_visible_rect().size * 0.5
-		handle_wiring_mouse_click(center_pt)
-		return
-
-	# 0. Проверяем интерактивное питание 220V, тумблер БП и кнопку питания
-	if try_interact_power():
-		return
-
-	# Проверяем взаимодействие с проводкой и БП (Wiring)
-	if try_interact_wiring():
-		return
-
-	# Проверяем клик по клавишам «6» и «7» клавиатуры
-	if try_interact_meme_keyboard():
-		return
-
-	# Проверяем взаимодействие с HDMI кабелем и портами
-	if try_interact_hdmi():
-		return
-
-	# Проверяем взаимодействие с USB флешкой Windows
-	if try_interact_usb():
-		return
-
-	# Проверяем взаимодействие с экраном монитора (клик/продолжить/зум)
-	if try_interact_monitor():
-		return
-
-	# Если держим инструмент — попробовать применить
-	if tool_held == "screwdriver":
-		try_use_screwdriver()
-		return
-	if tool_held == "thermal_paste":
-		try_apply_thermal_paste()
-		return
-
-	if held_part:
-		try_install()
-	else:
-		# 1. Сначала проверяем инструменты
-		if try_pickup_tool():
-			return
-		# 2. Проверяем извлечение установленной детали (если смотрим на ПК)
-		if try_extract():
-			return
-		# 3. Затем подбор свободной детали со стола
-		try_pickup()
-
-
-func try_pickup_tool() -> bool:
-	return tools_mgr.try_pickup_tool() if tools_mgr else false
-
-func pickup_tool(tool_name: String):
-	if tools_mgr: tools_mgr.pickup_tool(tool_name)
-
-func drop_tool():
-	if tools_mgr: tools_mgr.drop_tool()
-
-func try_use_screwdriver():
-	if tools_mgr: tools_mgr.try_use_screwdriver()
-
-func try_apply_thermal_paste():
-	if tools_mgr: tools_mgr.try_apply_thermal_paste()
-
-# ============================================
-# ПОДБОР И УСТАНОВКА ДЕТАЛЕЙ (ДЕЛЕГИРОВАНО В PARTS_MANAGER)
-# ============================================
-func try_pickup() -> bool:
-	return parts_mgr.try_pickup() if parts_mgr else false
-
-func get_part_display_name(id: String) -> String:
-	return parts_mgr.get_part_display_name(id) if parts_mgr else id
-
-func _set_part_colliders_enabled(node: Node, enabled: bool) -> void:
-	if parts_mgr: parts_mgr.set_part_colliders_enabled(node, enabled)
-
-func pick_up(part: Node3D) -> void:
-	if parts_mgr: parts_mgr.pick_up(part)
-
-func try_install() -> void:
-	if parts_mgr: parts_mgr.try_install()
-
-func install_part(slot_id: String) -> void:
-	if parts_mgr: parts_mgr.install_part(slot_id)
-
-func check_compatibility(part, slot) -> bool:
-	if parts_mgr:
-		return parts_mgr.check_compatibility(part, slot)
-	return true
-
-func drop_part() -> void:
-	if parts_mgr: parts_mgr.drop_part()
-
-func get_slot_for_part(part: Node3D) -> String:
-	return parts_mgr.get_slot_for_part(part) if parts_mgr else ""
-
-func try_extract() -> bool:
-	return parts_mgr.try_extract() if parts_mgr else false
-
-func find_part_node(node: Node) -> Node3D:
-	return parts_mgr.find_part_node(node) if parts_mgr else null
-
-func extract_part(slot_id: String, depth: int = 0) -> void:
-	if parts_mgr: parts_mgr.extract_part(slot_id, depth)
-
-func update_slot_highlights() -> void:
-	if parts_mgr: parts_mgr.update_slot_highlights()
-
-func update_info_card():
-	if hud_mgr: hud_mgr.update_info_card()
-
-func toggle_case_lid():
-	if world_builder: world_builder.toggle_case_lid()
-
-# ============================================
-# ВКЛЮЧЕНИЕ И ДИАГНОСТИКА ПК (ДЕЛЕГИРОВАНО В BOOT_MANAGER)
-# ============================================
-func try_boot_pc():
-	if boot_mgr: boot_mgr.try_boot_pc()
-
-func boot_sequence():
-	if boot_mgr: boot_mgr.boot_sequence()
-
-func _on_windows_installation_finished():
-	if boot_mgr: boot_mgr.on_windows_installation_finished()
-
-func _on_windows_os_crashed(_reason: String):
-	pass
-
-func flash_screen(color: Color):
-	if boot_mgr: boot_mgr.flash_screen(color)
-
-func update_score_display():
-	if hud_mgr: hud_mgr.update_score_display()
-
-# ============================================
-# ПОШАГОВЫЙ РЕЖИМ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
-# ============================================
-func advance_guided_step():
-	if guided_mgr: guided_mgr.advance_guided_step()
-
-func show_step_hint():
-	if guided_mgr: guided_mgr.show_step_hint()
-
-func recalculate_guided_step():
-	if guided_mgr: guided_mgr.recalculate_current_step()
-
-# ============================================
-# ОЧКИ И ОШИБКИ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
-# ============================================
-func add_mistake():
-	if guided_mgr: guided_mgr.add_mistake()
-
-# ============================================
-# ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
-# ============================================
-func show_test():
-	if not quiz_ui or not is_instance_valid(quiz_ui):
-		var old_c = get_node_or_null("TestCanvas")
-		if old_c: old_c.queue_free()
-		quiz_ui = QuizUIScript.new()
-		add_child(quiz_ui)
-		quiz_ui.back_to_menu_requested.connect(_on_quiz_back_to_menu)
-		quiz_ui.feedback_message.connect(_on_quiz_feedback_message)
-	quiz_ui.show_quiz()
-
-func show_question():
-	if quiz_ui:
-		quiz_ui.show_question()
-
-func answer_question(answer: String):
-	if quiz_ui:
-		quiz_ui.answer_question(answer)
-
-func finish_test():
-	if quiz_ui:
-		quiz_ui.finish_quiz()
-
-func _on_quiz_back_to_menu():
-	if quiz_ui and is_instance_valid(quiz_ui):
-		quiz_ui.queue_free()
-		quiz_ui = null
-	if is_inside_tree() and get_tree():
-		get_tree().reload_current_scene()
-
-func _on_quiz_feedback_message(text: String, is_error: bool):
-	if is_error:
-		show_error(text)
-	else:
-		show_message(text)
-
-# ============================================
-# СЕРТИФИКАТ И ПОБЕДНЫЕ ЭКРАНЫ (ДЕЛЕГИРОВАНО В VICTORY_UI)
-# ============================================
-func _get_or_create_victory_ui():
-	if not victory_ui or not is_instance_valid(victory_ui):
-		var old_vc = get_node_or_null("VictoryCanvas")
-		if old_vc: old_vc.queue_free()
-		var old_cc = get_node_or_null("CertCanvas")
-		if old_cc: old_cc.queue_free()
-		var old_pc = get_node_or_null("PodiumCanvas")
-		if old_pc: old_pc.queue_free()
-		victory_ui = VictoryUIScript.new()
-		add_child(victory_ui)
-		victory_ui.back_to_menu_requested.connect(_on_victory_back_to_menu)
-		victory_ui.restart_requested.connect(_on_victory_restart)
-	return victory_ui
-
-func show_certificate(elapsed_time: float):
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-	var ui = _get_or_create_victory_ui()
-	ui.show_certificate(player_name, elapsed_time, score, mistakes)
-
-func _on_victory_back_to_menu():
-	if victory_ui and is_instance_valid(victory_ui):
-		victory_ui.queue_free()
-		victory_ui = null
-	if is_inside_tree() and get_tree():
-		get_tree().reload_current_scene()
-
-func _on_victory_restart():
-	if victory_ui and is_instance_valid(victory_ui):
-		victory_ui.queue_free()
-		victory_ui = null
-	if is_inside_tree() and get_tree():
-		get_tree().reload_current_scene()
-
-# ============================================
-# СООБЩЕНИЯ
-# ============================================
-func show_message(text: String):
-	if hud_mgr: hud_mgr.show_message(text)
-
-func show_error(text: String):
-	if hud_mgr: hud_mgr.show_error(text)
-
-# ============================================
-# F5 — ПЕРЕЗАПУСК
-# ============================================
-func _unhandled_key_input(event):
-	if event.pressed and event.keycode == KEY_F5:
-		get_tree().reload_current_scene()
-
-# ============================================================
-# КОНФИГУРАТОР (ДЕЛЕГИРОВАН В ConfiguratorUI)
-# ============================================================
-const ConfiguratorUIScript = preload("res://scripts/ui/configurator_ui.gd")
-
-func show_configurator(target_mode: String):
+func show_configurator(target_mode: String) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if main_menu_ui and is_instance_valid(main_menu_ui):
 		main_menu_ui.queue_free()
@@ -1280,7 +340,7 @@ func show_configurator(target_mode: String):
 	cfg_canvas.layer = 20
 	add_child(cfg_canvas)
 
-	configurator_panel = ConfiguratorUIScript.new()
+	configurator_panel = ConfiguratorUI.new()
 	configurator_panel.target_mode = target_mode
 	cfg_canvas.add_child(configurator_panel)
 
@@ -1294,149 +354,341 @@ func show_configurator(target_mode: String):
 		build_main_menu()
 	)
 
+func _launch_game(mode: String) -> void:
+	if main_menu_ui and is_instance_valid(main_menu_ui):
+		main_menu_ui.queue_free()
+		main_menu_ui = null
+	if configurator_panel and is_instance_valid(configurator_panel):
+		configurator_panel.queue_free()
+		configurator_panel = null
+	var old_cfg = get_node_or_null("ConfiguratorCanvas")
+	if old_cfg: old_cfg.queue_free()
+
+	game_started = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+	_build_world_and_ui()
+
+	if mode == "guided":
+		current_step = 0
+		show_step_hint()
+	elif mode == "speedrun":
+		timer_active = true
+		build_start_time = Time.get_ticks_msec()
+		show_message("СБОРКА НА ВРЕМЯ (SPEEDRUN) НАЧАЛАСЬ!\nЗолото < 1:30  |  Серебро < 2:30  |  Бронза < 4:00")
+	elif mode == "test":
+		show_test()
+
+func _build_world_and_ui() -> void:
+	world_builder.build_room()
+	world_builder.build_workbench()
+	world_builder.build_pc_case()
+	world_builder.build_motherboard()
+	world_builder.build_parts_on_table()
+	tools_mgr.build_tools_on_table()
+	power_mgr.build_power_strip_and_cable()
+	world_builder.build_player()
+	world_builder.build_monitor()
+	peripherals_mgr.build_meme_keyboard()
+	peripherals_mgr.build_hdmi_system()
+	peripherals_mgr.build_usb_flash_drive()
+	hud_mgr.build_message_ui()
+	hud_mgr.build_crosshair()
+	hud_mgr.build_hud()
+	tips_mgr.build_tip_panel()
+	build_glossary_panel()
+	audio_mgr.init_pc_fan_sound()
+
 # ============================================================
-# ФИЗИЧЕСКОЕ ПОДКЛЮЧЕНИЕ ПРОВОДОВ В 3D (ДЕЛЕГИРОВАНО В WIRING_MANAGER)
+# ОБРАБОТКА ВВОДА (INPUT)
 # ============================================================
-func start_wiring_mode():
+func _input(event: InputEvent) -> void:
+	if not game_started: return
+
+	# Пасхалка — Konami Code
+	if tips_mgr and tips_mgr.handle_key_input(event): return
+
+	if glossary_open:
+		if glossary_ui and glossary_ui.handle_input(event): return
+		return
+
+	if event is InputEventMouseMotion:
+		if in_wiring_mode:
+			wiring_mgr.handle_wiring_mouse_hover(event.position)
+		elif camera_ctrl:
+			camera_ctrl.handle_mouse_motion(event.relative)
+
+	elif event is InputEventMouseButton and event.pressed:
+		match event.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				if camera_ctrl: camera_ctrl.zoom_in()
+			MOUSE_BUTTON_WHEEL_DOWN:
+				if camera_ctrl: camera_ctrl.zoom_out()
+			MOUSE_BUTTON_RIGHT:
+				if in_wiring_mode: wiring_mgr.drop_held_wire()
+				else: drop_held_item()
+			MOUSE_BUTTON_LEFT:
+				if in_wiring_mode: wiring_mgr.handle_wiring_mouse_click(event.position)
+				else: interact()
+
+	elif event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_1: if in_wiring_mode: wiring_mgr.grab_wire("mb_power")
+			KEY_2: if in_wiring_mode: wiring_mgr.grab_wire("cpu_power")
+			KEY_3: if in_wiring_mode: wiring_mgr.grab_wire("gpu_power")
+			KEY_4: if in_wiring_mode: wiring_mgr.grab_wire("fp_power")
+			KEY_6: if not in_wiring_mode: peripherals_mgr.press_meme_key("6")
+			KEY_7: if not in_wiring_mode: peripherals_mgr.press_meme_key("7")
+			KEY_C:
+				if in_wiring_mode: wiring_mgr.exit_wiring_mode()
+				else: start_wiring_mode()
+			KEY_E: interact()
+			KEY_X:
+				if in_wiring_mode: wiring_mgr.drop_held_wire()
+				else: drop_held_item()
+			KEY_R: if parts_mgr: parts_mgr.rotate_held_part()
+			KEY_P: power_mgr.toggle_psu_switch()
+			KEY_F: world_builder.toggle_case_lid()
+			KEY_G: toggle_glossary("glossary")
+			KEY_H, KEY_O: toggle_glossary("mistakes")
+			KEY_SPACE:
+				if in_wiring_mode:
+					if wire_done or connected_wires.size() >= 4: wiring_mgr.exit_wiring_mode()
+					return
+				if windows_sim and windows_sim.handle_interaction(): return
+				if monitor_action_cb and monitor_action_cb.is_valid():
+					monitor_action_cb.call()
+					return
+				if not pc_booted and not is_booting:
+					var can_boot = false
+					if raycast and raycast.is_colliding():
+						var col = raycast.get_collider()
+						if _is_power_button(col) or _is_psu_switch(col) or (pc_case and pc_case.is_ancestor_of(col)):
+							can_boot = true
+					if can_boot or (player and pc_case and player.global_position.distance_to(pc_case.global_position) < 3.0):
+						try_boot_pc()
+			KEY_ENTER:
+				if windows_sim and windows_sim.handle_interaction(): return
+				if monitor_action_cb and monitor_action_cb.is_valid():
+					monitor_action_cb.call()
+					return
+			KEY_Z: if camera_ctrl: camera_ctrl.toggle_monitor_zoom()
+			KEY_ESCAPE:
+				if in_wiring_mode: wiring_mgr.exit_wiring_mode()
+				elif camera_ctrl: camera_ctrl.toggle_mouse_mode()
+
+func _unhandled_key_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F5:
+		get_tree().reload_current_scene()
+
+# ============================================================
+# ВЗАИМОДЕЙСТВИЕ И ДЕЙСТВИЯ (INTERACTION)
+# ============================================================
+func interact() -> void:
+	if in_wiring_mode:
+		var center_pt = get_viewport().get_visible_rect().size * 0.5
+		wiring_mgr.handle_wiring_mouse_click(center_pt)
+		return
+
+	if power_mgr and power_mgr.try_interact_power(): return
+	if wiring_mgr and wiring_mgr.try_interact_wiring(): return
+	if peripherals_mgr and peripherals_mgr.try_interact_meme_keyboard(): return
+	if peripherals_mgr and peripherals_mgr.try_interact_hdmi(): return
+	if peripherals_mgr and peripherals_mgr.try_interact_usb(): return
+	if world_builder and world_builder.try_interact_monitor(): return
+
+	if tool_held == "screwdriver":
+		tools_mgr.try_use_screwdriver()
+		return
+	if tool_held == "thermal_paste":
+		tools_mgr.try_apply_thermal_paste()
+		return
+
+	if held_part:
+		parts_mgr.try_install()
+	else:
+		if tools_mgr and tools_mgr.try_pickup_tool(): return
+		if parts_mgr and parts_mgr.try_extract(): return
+		if parts_mgr: parts_mgr.try_pickup()
+
+func drop_held_item() -> void:
+	if in_wiring_mode:
+		wiring_mgr.drop_held_wire()
+		return
+	if tool_held != "":
+		tools_mgr.drop_tool()
+		show_message("Положили инструмент обратно на стол")
+		play_click_sound()
+		return
+	if held_part:
+		var p_name = held_part.get_meta("name") if held_part.has_meta("name") else "деталь"
+		parts_mgr.drop_part()
+		show_message("Положили %s обратно на стол" % p_name)
+		play_click_sound()
+
+# ============================================================
+# МЕТОДЫ-ДЕЛЕГАТЫ ДЛЯ МОДУЛЕЙ И ПОДСИСТЕМ
+# ============================================================
+func show_message(text: String) -> void:
+	if hud_mgr: hud_mgr.show_message(text)
+
+func show_error(text: String) -> void:
+	if hud_mgr: hud_mgr.show_error(text)
+
+func update_score_display() -> void:
+	if hud_mgr: hud_mgr.update_score_display()
+
+func advance_guided_step() -> void:
+	if guided_mgr: guided_mgr.advance_guided_step()
+
+func recalculate_guided_step() -> void:
+	if guided_mgr: guided_mgr.recalculate_current_step()
+
+func add_mistake() -> void:
+	if guided_mgr: guided_mgr.add_mistake()
+
+func show_step_hint() -> void:
+	if guided_mgr: guided_mgr.show_step_hint()
+
+func get_part_display_name(id: String) -> String:
+	return parts_mgr.get_part_display_name(id) if parts_mgr else id
+
+func get_slot_for_part(part: Node3D) -> String:
+	return parts_mgr.get_slot_for_part(part) if parts_mgr else ""
+
+func find_part_node(node: Node) -> Node3D:
+	return parts_mgr.find_part_node(node) if parts_mgr else null
+
+func try_boot_pc() -> void:
+	if boot_mgr: boot_mgr.try_boot_pc()
+
+func shutdown_pc_emergency(reason: String) -> void:
+	if boot_mgr: boot_mgr.shutdown_pc_emergency(reason)
+
+func flash_screen(color: Color) -> void:
+	if boot_mgr: boot_mgr.flash_screen(color)
+
+func start_wiring_mode() -> void:
 	if wiring_mgr: wiring_mgr.start_wiring_mode()
 
-func exit_wiring_mode():
-	if wiring_mgr: wiring_mgr.exit_wiring_mode()
-
-func handle_wiring_mouse_click(mouse_pos: Vector2):
-	if wiring_mgr: wiring_mgr.handle_wiring_mouse_click(mouse_pos)
-
-func handle_wiring_mouse_hover(mouse_pos: Vector2):
-	if wiring_mgr: wiring_mgr.handle_wiring_mouse_hover(mouse_pos)
-
-func grab_wire(wire_id: String):
-	if wiring_mgr: wiring_mgr.grab_wire(wire_id)
-
-func drop_held_wire():
-	if wiring_mgr: wiring_mgr.drop_held_wire()
-
-func try_plug_wire_to_socket(socket_id: String):
-	if wiring_mgr: wiring_mgr.try_plug_wire_to_socket(socket_id)
-
-func try_interact_wiring() -> bool:
-	return wiring_mgr.try_interact_wiring() if wiring_mgr else false
-
-func get_wire_display_name(wire_id: String) -> String:
-	return wiring_mgr.get_wire_display_name(wire_id) if wiring_mgr else wire_id
-
-func highlight_socket_for_wire(wire_id: String):
-	if wiring_mgr: wiring_mgr.highlight_socket_for_wire(wire_id)
-
-func clear_socket_highlights():
-	if wiring_mgr: wiring_mgr.clear_socket_highlights()
-
-func create_wire_socket_on(id: String, parent: Node3D, pos: Vector3, size: Vector3, display_name: String, color: Color):
-	if wiring_mgr: wiring_mgr.create_wire_socket_on(id, parent, pos, size, display_name, color)
-
-func build_loose_psu_wires():
+func build_loose_psu_wires() -> void:
 	if wiring_mgr: wiring_mgr.build_loose_psu_wires()
 
-func build_wiring_ui():
-	if wiring_mgr: wiring_mgr.build_wiring_ui()
+func create_wire_socket_on(id: String, parent: Node3D, pos: Vector3, size: Vector3, display_name: String, color: Color) -> void:
+	if wiring_mgr: wiring_mgr.create_wire_socket_on(id, parent, pos, size, display_name, color)
 
-func connect_single_cable(wire_id: String):
-	if wiring_mgr: wiring_mgr.connect_single_cable(wire_id)
-
-func connect_all_cables():
-	if wiring_mgr: wiring_mgr.connect_all_cables()
-
-func disconnect_single_cable(wire_id: String):
+func disconnect_single_cable(wire_id: String) -> void:
 	if wiring_mgr: wiring_mgr.disconnect_single_cable(wire_id)
 
-func reset_all_cables():
+func reset_all_cables() -> void:
 	if wiring_mgr: wiring_mgr.reset_all_cables()
 
-func spawn_physical_wire(wire_id: String):
-	if wiring_mgr: wiring_mgr.spawn_physical_wire(wire_id)
-
-func _build_cable_segment(parent: Node3D, p1: Vector3, p2: Vector3, thickness: float, color: Color):
-	WiringManagerScript.build_cable_segment(parent, p1, p2, thickness, color)
-
-func _on_wiring_completed():
+func _on_wiring_completed() -> void:
 	if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "wiring":
 		advance_guided_step()
 
+func build_psu_rear_controls() -> void:
+	if power_mgr: power_mgr.build_psu_rear_controls()
 
+# Монитор и экран
+func set_monitor_screen_off() -> void:
+	if world_builder: world_builder.set_monitor_screen_off()
 
+func set_monitor_screen_no_signal() -> void:
+	if world_builder: world_builder.set_monitor_screen_no_signal()
 
-# ============================================================
-# АНИМАЦИИ УСТАНОВКИ (ДЕЛЕГИРОВАНО В PARTS_MANAGER)
-# ============================================================
-func animate_install(part_node: Node3D) -> void:
-	if parts_mgr: parts_mgr.animate_install(part_node)
+func set_monitor_screen_bios(lines: Array, alert_type: String = "") -> void:
+	if world_builder: world_builder.set_monitor_screen_bios(lines, alert_type)
 
-func animate_error_shake(node: Node3D) -> void:
-	if parts_mgr: parts_mgr.animate_error_shake(node)
+func set_monitor_screen_desktop() -> void:
+	if world_builder: world_builder.set_monitor_screen_desktop()
 
+func _on_windows_installation_finished() -> void:
+	if boot_mgr: boot_mgr.on_windows_installation_finished()
 
-# ============================================================
-# ВНЕШНЯЯ ПЕРИФЕРИЯ (ДЕЛЕГИРОВАНО В PERIPHERALS_MANAGER)
-# ============================================================
+func _on_windows_os_crashed(reason: String) -> void:
+	if boot_mgr: boot_mgr.on_windows_os_crashed(reason)
+
+# Проверки интерактивных объектов (коллайдеров)
+func _is_power_button(collider) -> bool:
+	if not collider: return false
+	return collider == power_button or collider.name == "PowerButtonBody" or (collider.get_parent() and collider.get_parent().name == "PowerButtonBody")
+
+func _is_psu_switch(collider) -> bool:
+	return power_mgr.is_psu_switch(collider) if power_mgr else false
+
+func _is_psu_cable_or_socket(collider) -> bool:
+	return power_mgr.is_psu_cable_or_socket(collider) if power_mgr else false
+
+func _is_power_strip(collider) -> bool:
+	return power_mgr.is_power_strip(collider) if power_mgr else false
+
 func _is_meme_key(collider) -> bool:
 	return peripherals_mgr.is_meme_key(collider) if peripherals_mgr else false
-
-func build_meme_keyboard():
-	if peripherals_mgr: peripherals_mgr.build_meme_keyboard()
-
-func try_interact_meme_keyboard() -> bool:
-	return peripherals_mgr.try_interact_meme_keyboard() if peripherals_mgr else false
-
-func press_meme_key(k: String):
-	if peripherals_mgr: peripherals_mgr.press_meme_key(k)
-
-func play_key_clack():
-	if peripherals_mgr: peripherals_mgr.play_key_clack()
 
 func _is_hdmi_interactable(collider) -> bool:
 	return peripherals_mgr.is_hdmi_interactable(collider) if peripherals_mgr else false
 
-func build_hdmi_system():
-	if peripherals_mgr: peripherals_mgr.build_hdmi_system()
-
-func try_interact_hdmi() -> bool:
-	return peripherals_mgr.try_interact_hdmi() if peripherals_mgr else false
-
-func toggle_hdmi_cable():
-	if peripherals_mgr: peripherals_mgr.toggle_hdmi_cable()
-
-func _update_hdmi_visual():
-	if peripherals_mgr: peripherals_mgr.update_hdmi_visual()
-
 func _is_usb_interactable(collider) -> bool:
 	return peripherals_mgr.is_usb_interactable(collider) if peripherals_mgr else false
 
-func build_usb_flash_drive():
-	if peripherals_mgr: peripherals_mgr.build_usb_flash_drive()
+func _is_monitor_screen(collider) -> bool:
+	return world_builder.is_monitor_screen(collider) if world_builder else false
 
-func try_interact_usb() -> bool:
-	return peripherals_mgr.try_interact_usb() if peripherals_mgr else false
+# Звуковые эффекты
+func play_click_sound() -> void: if audio_mgr: audio_mgr.play_click_sound()
+func play_snap_sound() -> void: if audio_mgr: audio_mgr.play_snap_sound()
+func play_error_sound() -> void: if audio_mgr: audio_mgr.play_error_sound()
+func play_boot_sound() -> void: if audio_mgr: audio_mgr.play_boot_sound()
+func play_screw_sound() -> void: if audio_mgr: audio_mgr.play_screw_sound()
+func play_paste_sound() -> void: if audio_mgr: audio_mgr.play_paste_sound()
+func play_beep_sound() -> void: if audio_mgr: audio_mgr.play_beep_sound()
+func play_success_sound() -> void: if audio_mgr: audio_mgr.play_success_sound()
+func play_relay_sound(is_turning_on: bool) -> void: if audio_mgr: audio_mgr.play_relay_sound(is_turning_on)
+func play_switch_sound() -> void: if audio_mgr: audio_mgr.play_switch_sound()
+func start_pc_fan_ambient() -> void: if audio_mgr: audio_mgr.start_pc_fan_ambient()
+func stop_pc_fan_ambient() -> void: if audio_mgr: audio_mgr.stop_pc_fan_ambient()
 
-func toggle_usb_drive():
-	if peripherals_mgr: peripherals_mgr.toggle_usb_drive()
+# Окна результатов и глоссарий
+func build_glossary_panel() -> void:
+	if not glossary_ui or not is_instance_valid(glossary_ui):
+		var old = get_node_or_null("GlossaryCanvas")
+		if old: old.queue_free()
+		glossary_ui = GlossaryUI.new()
+		add_child(glossary_ui)
+		glossary_ui.closed.connect(func(): if not in_wiring_mode: Input.mouse_mode = Input.MOUSE_MODE_CAPTURED)
 
+func toggle_glossary(tab: String = "glossary") -> void:
+	if not glossary_ui or not is_instance_valid(glossary_ui):
+		build_glossary_panel()
+	glossary_ui.toggle(tab)
 
-# ============================================================
-# РИКРОЛЛ И WINDOWS 11 (ДЕЛЕГИРОВАНИЕ В WINDOWS_SIMULATOR)
-# ============================================================
-func show_rickroll_modal(on_continue: Callable):
-	if windows_sim:
-		windows_sim.start_rickroll(on_continue)
+func show_test() -> void:
+	if not quiz_ui or not is_instance_valid(quiz_ui):
+		var old_c = get_node_or_null("TestCanvas")
+		if old_c: old_c.queue_free()
+		quiz_ui = QuizUI.new()
+		add_child(quiz_ui)
+		quiz_ui.back_to_menu_requested.connect(func(): get_tree().reload_current_scene())
+		quiz_ui.feedback_message.connect(func(text: String, is_err: bool): if is_err: show_error(text) else: show_message(text))
+	quiz_ui.show_quiz()
 
-func show_windows_installer_wizard(on_finish: Callable):
-	if windows_sim:
-		windows_sim.start_installer(on_finish)
+func _get_or_create_victory_ui() -> VictoryUI:
+	if not victory_ui or not is_instance_valid(victory_ui):
+		var old_vc = get_node_or_null("VictoryCanvas")
+		if old_vc: old_vc.queue_free()
+		victory_ui = VictoryUI.new()
+		add_child(victory_ui)
+		victory_ui.back_to_menu_requested.connect(func(): get_tree().reload_current_scene())
+		victory_ui.restart_requested.connect(func(): get_tree().reload_current_scene())
+	return victory_ui
 
+func show_certificate(elapsed_time: float) -> void:
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var ui = _get_or_create_victory_ui()
+	ui.show_certificate(player_name, elapsed_time, score, mistakes)
 
-
-# ============================================================
-# ПОБЕДНЫЙ ПЬЕДЕСТАЛ И ТАБЛИЦА РЕКОРДОВ (SPEEDRUN) (ДЕЛЕГИРОВАНО В VICTORY_UI)
-# ============================================================
-func show_speedrun_victory_podium(elapsed_seconds: float):
+func show_speedrun_victory_podium(elapsed_seconds: float) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var ui = _get_or_create_victory_ui()
 	ui.show_speedrun_victory_podium(player_name, elapsed_seconds, mistakes, score, speedrun_records)
