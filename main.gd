@@ -84,10 +84,27 @@ var score = 100
 var mistakes = 0
 var score_label: Label
 
-# Тест
-var current_question = 0
-var test_score = 0
-var test_panel: Control
+# ============================================
+# ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
+# ============================================
+const QuizUIScript = preload("res://scripts/ui/quiz_ui.gd")
+var quiz_ui = null
+
+var current_question: int:
+	get: return quiz_ui.current_question if quiz_ui else 0
+	set(val):
+		if quiz_ui: quiz_ui.current_question = val
+
+var test_score: int:
+	get: return quiz_ui.test_score if quiz_ui else 0
+	set(val):
+		if quiz_ui: quiz_ui.test_score = val
+
+var test_panel: Control:
+	get: return quiz_ui.test_panel if quiz_ui else null
+
+var test_canvas: CanvasLayer:
+	get: return quiz_ui
 
 # Сертификат
 var certificate_panel: Control
@@ -3106,213 +3123,42 @@ func add_mistake():
 	play_error_sound()
 
 # ============================================
-# ТЕСТ ЗНАНИЙ (ПОЛНОЭКРАННЫЙ РЕЖИМ)
+# ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
 # ============================================
-var test_canvas: CanvasLayer = null
-
 func show_test():
-	var old_c = get_node_or_null("TestCanvas")
-	if old_c: old_c.queue_free()
-
-	test_canvas = CanvasLayer.new()
-	test_canvas.name = "TestCanvas"
-	test_canvas.layer = 50
-	add_child(test_canvas)
-
-	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-
-	test_panel = Control.new()
-	test_panel.name = "TestPanel"
-	test_panel.set_anchors_preset(Control.PRESET_FULL_RECT)
-	test_canvas.add_child(test_panel)
-
-	# 100% сплошной глубокий матовый фон на ВЕСЬ экран (без видимости 3D сцены)
-	var bg = ColorRect.new()
-	bg.name = "TestBG"
-	bg.color = Color(0.06, 0.08, 0.12, 1.0)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	test_panel.add_child(bg)
-
-	var center = CenterContainer.new()
-	center.name = "TestCenter"
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	test_panel.add_child(center)
-
-	# Карточка теста
-	var card_sb = StyleBoxFlat.new()
-	card_sb.bg_color = Color(0.10, 0.13, 0.19, 1.0)
-	card_sb.corner_radius_top_left = 16
-	card_sb.corner_radius_top_right = 16
-	card_sb.corner_radius_bottom_left = 16
-	card_sb.corner_radius_bottom_right = 16
-	card_sb.border_width_left = 2
-	card_sb.border_width_right = 2
-	card_sb.border_width_top = 2
-	card_sb.border_width_bottom = 2
-	card_sb.border_color = Color(0.22, 0.38, 0.60, 0.8)
-	card_sb.content_margin_left = 44
-	card_sb.content_margin_right = 44
-	card_sb.content_margin_top = 32
-	card_sb.content_margin_bottom = 32
-
-	var card = PanelContainer.new()
-	card.name = "TestCard"
-	card.add_theme_stylebox_override("panel", card_sb)
-	card.custom_minimum_size = Vector2(840, 0)
-	center.add_child(card)
-
-	var vbox = VBoxContainer.new()
-	vbox.name = "TestVBox"
-	vbox.add_theme_constant_override("separation", 18)
-	card.add_child(vbox)
-
-	var title = Label.new()
-	title.name = "TestTitle"
-	title.text = "ТЕСТ ЗНАНИЙ ПО СБОРКЕ И ЖЕЛЕЗУ ПК"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 28)
-	title.add_theme_color_override("font_color", Color(0.35, 0.85, 1.0))
-	vbox.add_child(title)
-
-	var q_num = Label.new()
-	q_num.name = "QuestionNumber"
-	q_num.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	q_num.add_theme_font_size_override("font_size", 16)
-	q_num.add_theme_color_override("font_color", Color(0.55, 0.70, 0.90))
-	vbox.add_child(q_num)
-
-	var q_label = Label.new()
-	q_label.name = "QuestionLabel"
-	q_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	q_label.add_theme_font_size_override("font_size", 20)
-	q_label.add_theme_color_override("font_color", Color.WHITE)
-	q_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	vbox.add_child(q_label)
-
-	var options_container = VBoxContainer.new()
-	options_container.name = "OptionsContainer"
-	options_container.add_theme_constant_override("separation", 12)
-	vbox.add_child(options_container)
-
-	var score_lbl = Label.new()
-	score_lbl.name = "TestScoreLabel"
-	score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	score_lbl.add_theme_font_size_override("font_size", 16)
-	score_lbl.add_theme_color_override("font_color", Color(1, 0.88, 0.35))
-	vbox.add_child(score_lbl)
-
-	var back_btn = Button.new()
-	back_btn.name = "TestBackBtn"
-	back_btn.text = "В главное меню"
-	back_btn.add_theme_font_size_override("font_size", 15)
-	back_btn.custom_minimum_size = Vector2(0, 42)
-	back_btn.pressed.connect(func(): get_tree().reload_current_scene())
-	vbox.add_child(back_btn)
-
-	current_question = 0
-	test_score = 0
-	show_question()
+	if not quiz_ui or not is_instance_valid(quiz_ui):
+		var old_c = get_node_or_null("TestCanvas")
+		if old_c: old_c.queue_free()
+		quiz_ui = QuizUIScript.new()
+		add_child(quiz_ui)
+		quiz_ui.back_to_menu_requested.connect(_on_quiz_back_to_menu)
+		quiz_ui.feedback_message.connect(_on_quiz_feedback_message)
+	quiz_ui.show_quiz()
 
 func show_question():
-	if current_question >= GameDatabase.TEST_QUESTIONS.size():
-		finish_test()
-		return
-	var q_num = test_panel.find_child("QuestionNumber", true, false)
-	var q_label = test_panel.find_child("QuestionLabel", true, false)
-	var container = test_panel.find_child("OptionsContainer", true, false)
-	var score_lbl = test_panel.find_child("TestScoreLabel", true, false)
-	if not q_label or not container or not score_lbl:
-		return
-
-	var q = GameDatabase.TEST_QUESTIONS[current_question]
-	if q_num:
-		q_num.text = "Вопрос %d из %d" % [current_question + 1, GameDatabase.TEST_QUESTIONS.size()]
-	q_label.text = q["q"]
-
-	for child in container.get_children():
-		child.queue_free()
-
-	for opt in q["options"]:
-		var btn = Button.new()
-		btn.text = opt
-		btn.add_theme_font_size_override("font_size", 17)
-		btn.custom_minimum_size = Vector2(0, 50)
-		var sb_n = StyleBoxFlat.new()
-		sb_n.bg_color = Color(0.14, 0.18, 0.26, 1.0)
-		sb_n.corner_radius_top_left = 10
-		sb_n.corner_radius_top_right = 10
-		sb_n.corner_radius_bottom_left = 10
-		sb_n.corner_radius_bottom_right = 10
-		sb_n.content_margin_left = 20
-		sb_n.content_margin_right = 20
-		btn.add_theme_stylebox_override("normal", sb_n)
-		var sb_h = StyleBoxFlat.new()
-		sb_h.bg_color = Color(0.24, 0.36, 0.54, 1.0)
-		sb_h.corner_radius_top_left = 10
-		sb_h.corner_radius_top_right = 10
-		sb_h.corner_radius_bottom_left = 10
-		sb_h.corner_radius_bottom_right = 10
-		sb_h.content_margin_left = 20
-		sb_h.content_margin_right = 20
-		btn.add_theme_stylebox_override("hover", sb_h)
-		var _opt = opt
-		btn.pressed.connect(func(): answer_question(_opt))
-		container.add_child(btn)
-
-	score_lbl.text = "Правильных ответов: %d из %d" % [test_score, current_question]
+	if quiz_ui:
+		quiz_ui.show_question()
 
 func answer_question(answer: String):
-	var q = GameDatabase.TEST_QUESTIONS[current_question]
-	if answer == q["a"]:
-		test_score += 1
-		show_message("Правильно!")
-		play_success_sound()
-	else:
-		show_message("Неправильно! Правильный ответ: " + q["a"])
-		play_error_sound()
-	current_question += 1
-	await get_tree().create_timer(0.45).timeout
-	show_question()
+	if quiz_ui:
+		quiz_ui.answer_question(answer)
 
 func finish_test():
-	var q_num = test_panel.find_child("QuestionNumber", true, false)
-	var q_label = test_panel.find_child("QuestionLabel", true, false)
-	var container = test_panel.find_child("OptionsContainer", true, false)
-	var score_lbl = test_panel.find_child("TestScoreLabel", true, false)
-	var back_btn = test_panel.find_child("TestBackBtn", true, false)
-	var vbox = test_panel.find_child("TestVBox", true, false)
+	if quiz_ui:
+		quiz_ui.finish_quiz()
 
-	if q_num: q_num.visible = false
-	if container: container.visible = false
-	if q_label:
-		q_label.text = "ТЕСТ ЗАВЕРШЁН!"
-		q_label.add_theme_font_size_override("font_size", 24)
-		q_label.add_theme_color_override("font_color", Color(0.3, 1.0, 0.6))
+func _on_quiz_back_to_menu():
+	if quiz_ui and is_instance_valid(quiz_ui):
+		quiz_ui.queue_free()
+		quiz_ui = null
+	if is_inside_tree() and get_tree():
+		get_tree().reload_current_scene()
 
-	var percent = int((test_score * 100.0) / GameDatabase.TEST_QUESTIONS.size())
-	var grade = "Отлично! Мастер ПК" if percent >= 85 else ("Хороший результат" if percent >= 60 else "Нужно подучить теорию")
-	if score_lbl:
-		score_lbl.text = "Ваш результат:  %d из %d  (%d%%)\nОценка:  %s" % [test_score, GameDatabase.TEST_QUESTIONS.size(), percent, grade]
-		score_lbl.add_theme_font_size_override("font_size", 20)
-
-	play_success_sound()
-
-	if vbox:
-		var retry_btn = Button.new()
-		retry_btn.text = "Пройти тест заново"
-		retry_btn.add_theme_font_size_override("font_size", 16)
-		retry_btn.custom_minimum_size = Vector2(0, 48)
-		retry_btn.pressed.connect(func():
-			current_question = 0
-			test_score = 0
-			if container: container.visible = true
-			if q_num: q_num.visible = true
-			retry_btn.queue_free()
-			show_question()
-		)
-		vbox.add_child(retry_btn)
-		if back_btn:
-			vbox.move_child(back_btn, vbox.get_child_count() - 1)
+func _on_quiz_feedback_message(text: String, is_error: bool):
+	if is_error:
+		show_error(text)
+	else:
+		show_message(text)
 
 # ============================================
 # СЕРТИФИКАТ
