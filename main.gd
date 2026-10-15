@@ -372,14 +372,46 @@ var speedrun_records = [
 ]
 
 # ============================================
-# СОВЕТЫ "А ТЫ ЗНАЛ?"
+# СОВЕТЫ И ПАСХАЛКИ (ДЕЛЕГИРОВАНО В TIPS_MANAGER)
 # ============================================
-var tip_timer = 0.0
-var tip_interval = 35.0
-var tip_label: Label = null
-var tip_panel: Control = null
-var tip_visible = false
-var tip_display_timer = 0.0
+const TipsManagerScript = preload("res://scripts/managers/tips_manager.gd")
+var tips_mgr = null
+
+var tip_timer: float:
+	get: return tips_mgr.tip_timer if tips_mgr else 0.0
+	set(val): if tips_mgr: tips_mgr.tip_timer = val
+
+var tip_interval: float:
+	get: return tips_mgr.tip_interval if tips_mgr else 35.0
+	set(val): if tips_mgr: tips_mgr.tip_interval = val
+
+var tip_label: Label:
+	get: return tips_mgr.tip_label if tips_mgr else null
+	set(val): if tips_mgr: tips_mgr.tip_label = val
+
+var tip_panel: Control:
+	get: return tips_mgr.tip_panel if tips_mgr else null
+	set(val): if tips_mgr: tips_mgr.tip_panel = val
+
+var tip_visible: bool:
+	get: return tips_mgr.tip_visible if tips_mgr else false
+	set(val): if tips_mgr: tips_mgr.tip_visible = val
+
+var tip_display_timer: float:
+	get: return tips_mgr.tip_display_timer if tips_mgr else 0.0
+	set(val): if tips_mgr: tips_mgr.tip_display_timer = val
+
+var konami_buffer: Array:
+	get: return tips_mgr.konami_buffer if tips_mgr else []
+	set(val): if tips_mgr: tips_mgr.konami_buffer = val
+
+var konami_code: Array:
+	get: return tips_mgr.konami_code if tips_mgr else []
+	set(val): if tips_mgr: tips_mgr.konami_code = val
+
+var easter_egg_activated: bool:
+	get: return tips_mgr.easter_egg_activated if tips_mgr else false
+	set(val): if tips_mgr: tips_mgr.easter_egg_activated = val
 
 # ============================================
 # ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ДЕЛЕГИРОВАНО В GLOSSARY_UI)
@@ -405,12 +437,7 @@ var glossary_panel: Control:
 var glossary_canvas: CanvasLayer:
 	get: return glossary_ui if is_instance_valid(glossary_ui) else null
 
-# ============================================
-# ПАСХАЛКА
-# ============================================
-var konami_buffer = []
-var konami_code = [KEY_UP, KEY_UP, KEY_DOWN, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_LEFT, KEY_RIGHT, KEY_B, KEY_A]
-var easter_egg_activated = false
+
 
 # ============================================
 # КОНФИГУРАТОР
@@ -502,6 +529,10 @@ func _ready():
 	hud_mgr.name = "HUDManager"
 	hud_mgr.setup(self)
 	add_child(hud_mgr)
+	tips_mgr = TipsManagerScript.new()
+	tips_mgr.name = "TipsManager"
+	tips_mgr.setup(self)
+	add_child(tips_mgr)
 	tools_mgr = ToolsManagerScript.new()
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
@@ -719,50 +750,7 @@ func build_message_ui():
 # СОВЕТЫ "А ТЫ ЗНАЛ?"
 # ============================================
 func build_tip_panel():
-	tip_panel = Control.new()
-	tip_panel.name = "TipPanel"
-	tip_panel.anchor_left = 0.0
-	tip_panel.anchor_right = 1.0
-	tip_panel.anchor_top = 1.0
-	tip_panel.anchor_bottom = 1.0
-	tip_panel.offset_top = -80
-	tip_panel.offset_bottom = 0
-	add_child(tip_panel)
-	tip_panel.visible = false
-
-	var bg = StyleBoxFlat.new()
-	bg.bg_color = Color(0.05, 0.05, 0.15, 0.92)
-	bg.corner_radius_top_left = 8
-	bg.corner_radius_top_right = 8
-	bg.border_width_top = 1
-	bg.border_color = Color(0.3, 0.6, 1.0, 0.7)
-
-	var panel = PanelContainer.new()
-	panel.anchor_left = 0.05
-	panel.anchor_right = 0.95
-	panel.anchor_top = 0.0
-	panel.anchor_bottom = 1.0
-	panel.add_theme_stylebox_override("panel", bg)
-	tip_panel.add_child(panel)
-
-	var hbox = HBoxContainer.new()
-	hbox.add_theme_constant_override("separation", 10)
-	panel.add_child(hbox)
-
-	var tip_tag = Label.new()
-	tip_tag.text = "[СОВЕТ]"
-	tip_tag.add_theme_font_size_override("font_size", 13)
-	tip_tag.add_theme_color_override("font_color", Color(0.35, 0.85, 1.0))
-	tip_tag.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hbox.add_child(tip_tag)
-
-	tip_label = Label.new()
-	tip_label.add_theme_font_size_override("font_size", 14)
-	tip_label.add_theme_color_override("font_color", Color(0.85, 0.9, 1.0))
-	tip_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	tip_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tip_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hbox.add_child(tip_label)
+	if tips_mgr: tips_mgr.build_tip_panel()
 
 # ============================================
 # ГЛОССАРИЙ И БАЗА ЗНАНИЙ (ДЕЛЕГИРОВАНО В GLOSSARY_UI)
@@ -873,12 +861,8 @@ func _physics_process(delta):
 func _input(event):
 	if not game_started: return
 	# Пасхалка — Konami Code
-	if event is InputEventKey and event.pressed:
-		konami_buffer.append(event.keycode)
-		if konami_buffer.size() > konami_code.size():
-			konami_buffer.pop_front()
-		if konami_buffer == konami_code:
-			activate_easter_egg()
+	if tips_mgr and tips_mgr.handle_key_input(event):
+		return
 
 	if glossary_open:
 		if glossary_ui and glossary_ui.handle_input(event):
@@ -998,16 +982,8 @@ func _process(delta):
 		hud_mgr.process_hud(delta)
 
 	# Советы
-	if not glossary_open:
-		tip_timer += delta
-		if tip_timer >= tip_interval:
-			tip_timer = 0.0
-			show_random_tip()
-		if tip_visible:
-			tip_display_timer -= delta
-			if tip_display_timer <= 0:
-				tip_panel.visible = false
-				tip_visible = false
+	if not glossary_open and tips_mgr:
+		tips_mgr.process_tips(delta)
 
 func _is_power_button(collider) -> bool:
 	if collider == power_button: return true
@@ -1016,43 +992,13 @@ func _is_power_button(collider) -> bool:
 	return false
 
 # ============================================
-# СОВЕТЫ
+# СОВЕТЫ И ПАСХАЛКИ (ДЕЛЕГИРОВАНО В TIPS_MANAGER)
 # ============================================
 func show_random_tip():
-	if not tip_label or not tip_panel: return
-	tip_label.text = GameDatabase.TIPS[randi() % GameDatabase.TIPS.size()]
-	tip_panel.visible = true
-	tip_visible = true
-	tip_display_timer = 6.0
-	var tween = create_tween()
-	tip_panel.modulate.a = 0.0
-	tween.tween_property(tip_panel, "modulate:a", 1.0, 0.5)
+	if tips_mgr: tips_mgr.show_random_tip()
 
-# ============================================
-# ПАСХАЛКА
-# ============================================
 func activate_easter_egg():
-	if easter_egg_activated: return
-	easter_egg_activated = true
-	show_message("ЧИТ-КОД АКТИВИРОВАН! RGB РЕЖИМ ВКЛЮЧЁН!")
-	# RGB эффект на мониторе
-	if monitor_screen:
-		var mat = monitor_screen.get_surface_override_material(0)
-		var tween = create_tween()
-		tween.set_loops(20)
-		tween.tween_property(mat, "albedo_color", Color(1, 0, 0), 0.15)
-		tween.tween_property(mat, "albedo_color", Color(1, 1, 0), 0.15)
-		tween.tween_property(mat, "albedo_color", Color(0, 1, 0), 0.15)
-		tween.tween_property(mat, "albedo_color", Color(0, 1, 1), 0.15)
-		tween.tween_property(mat, "albedo_color", Color(0, 0, 1), 0.15)
-		tween.tween_property(mat, "albedo_color", Color(1, 0, 1), 0.15)
-	# Мигание кнопки питания
-	if power_button:
-		var mat2 = power_button.get_surface_override_material(0)
-		var tween2 = create_tween()
-		tween2.set_loops(10)
-		tween2.tween_property(mat2, "albedo_color", Color(1, 0.5, 0), 0.2)
-		tween2.tween_property(mat2, "albedo_color", Color(0.1, 0.7, 0.3), 0.2)
+	if tips_mgr: tips_mgr.activate_easter_egg()
 
 # ============================================
 # ВЗАИМОДЕЙСТВИЕ
