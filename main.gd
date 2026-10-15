@@ -130,14 +130,35 @@ var certificate_panel: Control:
 var player_name = "Сборщик"
 
 # ============================================
-# ИНСТРУМЕНТЫ (отвёртка, термопаста)
+# ИНСТРУМЕНТЫ (ДЕЛЕГИРОВАНО В TOOLS_MANAGER)
 # ============================================
-var tool_held = ""  # "screwdriver" | "thermal_paste" | ""
-var thermal_paste_applied = false
-var mb_screwed = false
-var screw_count = 0
-var screwdriver_node: Node3D = null
-var thermal_paste_node: Node3D = null
+const ToolsManagerScript = preload("res://scripts/managers/tools_manager.gd")
+var tools_mgr = null
+
+var tool_held: String:
+	get: return tools_mgr.tool_held if tools_mgr else ""
+	set(val): if tools_mgr: tools_mgr.tool_held = val
+
+var thermal_paste_applied: bool:
+	get: return tools_mgr.thermal_paste_applied if tools_mgr else false
+	set(val): if tools_mgr: tools_mgr.thermal_paste_applied = val
+
+var mb_screwed: bool:
+	get: return tools_mgr.mb_screwed if tools_mgr else false
+	set(val): if tools_mgr: tools_mgr.mb_screwed = val
+
+var screw_count: int:
+	get: return tools_mgr.screw_count if tools_mgr else 0
+	set(val): if tools_mgr: tools_mgr.screw_count = val
+
+var screwdriver_node: Node3D:
+	get: return tools_mgr.screwdriver_node if tools_mgr else null
+	set(val): if tools_mgr: tools_mgr.screwdriver_node = val
+
+var thermal_paste_node: Node3D:
+	get: return tools_mgr.thermal_paste_node if tools_mgr else null
+	set(val): if tools_mgr: tools_mgr.thermal_paste_node = val
+
 var tool_indicator: Label = null
 
 # ============================================
@@ -378,6 +399,10 @@ func _ready():
 	power_mgr.name = "PowerManager"
 	power_mgr.setup(self)
 	add_child(power_mgr)
+	tools_mgr = ToolsManagerScript.new()
+	tools_mgr.name = "ToolsManager"
+	tools_mgr.setup(self)
+	add_child(tools_mgr)
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -934,55 +959,10 @@ func create_part(id, part_name, size, pos, color, type, compat=""):
 	parts[id] = part
 
 # ============================================
-# ИНСТРУМЕНТЫ (отвёртка + термопаста)
+# ИНСТРУМЕНТЫ (отвёртка + термопаста) (ДЕЛЕГИРОВАНО В TOOLS_MANAGER)
 # ============================================
 func build_tools_on_table():
-	# Отвёртка (лежит на лотке для инструментов слева от корпуса)
-	screwdriver_node = Node3D.new()
-	screwdriver_node.name = "Screwdriver"
-	screwdriver_node.position = Vector3(-0.50, 0.935, -1.68)
-	screwdriver_node.set_meta("id", "screwdriver")
-	screwdriver_node.set_meta("name", "Отвёртка PH2")
-	add_child(screwdriver_node)
-	# Рукоять
-	make_box_on(screwdriver_node, Vector3(0.025, 0.025, 0.12), Vector3(0, 0, 0), Color(0.7, 0.2, 0.1))
-	# Жало
-	make_box_on(screwdriver_node, Vector3(0.008, 0.008, 0.08), Vector3(0, 0, -0.10), Color(0.75, 0.75, 0.8))
-	screwdriver_node.add_to_group("tools")
-	var sd_body = StaticBody3D.new()
-	sd_body.name = "ScrewdriverBody"
-	var sd_col = CollisionShape3D.new()
-	var sd_shape = BoxShape3D.new()
-	sd_shape.size = Vector3(0.08, 0.08, 0.25)
-	sd_col.shape = sd_shape
-	sd_body.add_child(sd_col)
-	sd_body.collision_layer = 2
-	sd_body.collision_mask = 0
-	screwdriver_node.add_child(sd_body)
-
-	# Термопаста (рядом с отвёрткой)
-	thermal_paste_node = Node3D.new()
-	thermal_paste_node.name = "ThermalPaste"
-	thermal_paste_node.position = Vector3(-0.35, 0.935, -1.68)
-	thermal_paste_node.set_meta("id", "thermal_paste")
-	thermal_paste_node.set_meta("name", "Термопаста")
-	add_child(thermal_paste_node)
-	# Тюбик
-	make_box_on(thermal_paste_node, Vector3(0.025, 0.025, 0.07), Vector3(0, 0, 0), Color(0.85, 0.85, 0.9))
-	make_box_on(thermal_paste_node, Vector3(0.015, 0.015, 0.025), Vector3(0, 0, -0.048), Color(0.6, 0.6, 0.65))
-	# Надпись-цветовая метка (серая)
-	make_box_on(thermal_paste_node, Vector3(0.026, 0.012, 0.045), Vector3(0, 0.007, 0.01), Color(0.4, 0.4, 0.8))
-	thermal_paste_node.add_to_group("tools")
-	var tp_body = StaticBody3D.new()
-	tp_body.name = "ThermalPasteBody"
-	var tp_col = CollisionShape3D.new()
-	var tp_shape = BoxShape3D.new()
-	tp_shape.size = Vector3(0.08, 0.08, 0.14)
-	tp_col.shape = tp_shape
-	tp_body.add_child(tp_col)
-	tp_body.collision_layer = 2
-	tp_body.collision_mask = 0
-	thermal_paste_node.add_child(tp_body)
+	if tools_mgr: tools_mgr.build_tools_on_table()
 
 # ============================================
 # ИГРОК
@@ -1636,139 +1616,19 @@ func interact():
 
 
 func try_pickup_tool() -> bool:
-	if not raycast.is_colliding(): return false
-	var collider = raycast.get_collider()
-	var hit_pos = raycast.get_collision_point()
-
-	# 1. Прямой прицел на коллайдер термопасты
-	if thermal_paste_node and is_instance_valid(thermal_paste_node) and thermal_paste_node.is_ancestor_of(collider):
-		if not thermal_paste_applied and thermal_paste_node.get_parent() != camera:
-			pickup_tool("thermal_paste")
-			return true
-		return false
-
-	# 2. Прямой прицел на коллайдер отвёртки
-	if screwdriver_node and is_instance_valid(screwdriver_node) and screwdriver_node.is_ancestor_of(collider):
-		if screwdriver_node.get_parent() != camera:
-			pickup_tool("screwdriver")
-			return true
-		return false
-
-	# Если прицел направлен прямо на деталь ПК — не перехватывать инструментом
-	if find_part_node(collider) != null:
-		return false
-
-	# 3. Клик на столе рядом — выбираем строго БЛИЖАЙШИЙ инструмент
-	var best_tool = ""
-	var min_dist = 0.20
-
-	if thermal_paste_node and is_instance_valid(thermal_paste_node) and not thermal_paste_applied and thermal_paste_node.get_parent() != camera:
-		var d = hit_pos.distance_to(thermal_paste_node.global_position)
-		if d < min_dist:
-			min_dist = d
-			best_tool = "thermal_paste"
-
-	if screwdriver_node and is_instance_valid(screwdriver_node) and screwdriver_node.get_parent() != camera:
-		var d = hit_pos.distance_to(screwdriver_node.global_position)
-		if d < min_dist:
-			min_dist = d
-			best_tool = "screwdriver"
-
-	if best_tool != "":
-		pickup_tool(best_tool)
-		return true
-
-	return false
+	return tools_mgr.try_pickup_tool() if tools_mgr else false
 
 func pickup_tool(tool_name: String):
-	tool_held = tool_name
-	play_click_sound()
-	match tool_name:
-		"screwdriver":
-			screwdriver_node.reparent(camera)
-			screwdriver_node.position = Vector3(0.25, -0.2, -0.5)
-			screwdriver_node.rotation = Vector3(0, 0, -0.3)
-			tool_indicator.text = "Инструмент: Отвёртка (E — закрутить болт)"
-			show_message("Взяли отвёртку! Установите материнскую плату в корпус, затем нажмите E рядом с корпусом")
-		"thermal_paste":
-			thermal_paste_node.reparent(camera)
-			thermal_paste_node.position = Vector3(0.22, -0.22, -0.5)
-			thermal_paste_node.rotation = Vector3(0, 0, 0.4)
-			tool_indicator.text = "Инструмент: Термопаста (E — нанести на CPU)"
-			show_message("Взяли термопасту! Нажмите E рядом с установленным процессором")
+	if tools_mgr: tools_mgr.pickup_tool(tool_name)
 
 func drop_tool():
-	match tool_held:
-		"screwdriver":
-			screwdriver_node.reparent(self)
-			screwdriver_node.position = Vector3(-0.50, 0.935, -1.68)
-			screwdriver_node.rotation = Vector3.ZERO
-		"thermal_paste":
-			thermal_paste_node.reparent(self)
-			thermal_paste_node.position = Vector3(-0.35, 0.935, -1.68)
-			thermal_paste_node.rotation = Vector3.ZERO
-	tool_held = ""
-	tool_indicator.text = ""
+	if tools_mgr: tools_mgr.drop_tool()
 
 func try_use_screwdriver():
-	if not slots["mb_slot"]["occupied"]:
-		show_error("Сначала установите материнскую плату в корпус!")
-		return
-	if not raycast.is_colliding(): return
-	var hit_pos = raycast.get_collision_point()
-	if hit_pos.distance_to(pc_case.global_position) < 0.8:
-		if not mb_screwed:
-			screw_count += 1
-			play_screw_sound()
-			show_message("Болт %d/4 закручен..." % screw_count)
-			if screw_count >= 4:
-				mb_screwed = true
-				drop_tool()
-				show_message("Материнская плата надёжно закреплена в корпусе! (4/4 болта)")
-				play_success_sound()
-				# В пошаговом режиме переходим к следующему шагу
-				if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "screwdriver":
-					advance_guided_step()
-		else:
-			# Откручивание материнской платы
-			screw_count -= 1
-			play_screw_sound()
-			if screw_count <= 0:
-				mb_screwed = false
-				screw_count = 0
-				drop_tool()
-				show_message("Все 4 болта откручены! Теперь материнскую плату можно извлечь")
-				play_click_sound()
-			else:
-				show_message("Болт откручен (осталось закреплено: %d/4)..." % screw_count)
-	else:
-		show_error("Подойдите ближе к корпусу!")
+	if tools_mgr: tools_mgr.try_use_screwdriver()
 
 func try_apply_thermal_paste():
-	if not slots["cpu"]["occupied"]:
-		show_error("Сначала установите процессор!")
-		return
-	if thermal_paste_applied:
-		show_message("Термопаста уже нанесена!")
-		drop_tool()
-		return
-	if not raycast.is_colliding(): return
-	var hit_pos = raycast.get_collision_point()
-	var cpu_world_pos = slots["cpu"]["node"].global_position
-	if hit_pos.distance_to(cpu_world_pos) < 0.5:
-		thermal_paste_applied = true
-		play_paste_sound()
-		# Визуальный эффект — серая капля на CPU
-		var paste_dot = make_box_on(parts["cpu"], Vector3(0.015, 0.003, 0.015), Vector3(0, 0.005, 0), Color(0.7, 0.72, 0.75))
-		paste_dot.name = "PasteDot"
-		drop_tool()
-		thermal_paste_node.visible = false  # Паста использована
-		show_message("Термопаста нанесена! Теперь можно устанавливать кулер")
-		play_success_sound()
-		if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "thermal_paste":
-			advance_guided_step()
-	else:
-		show_error("Нажмите E рядом с процессором!")
+	if tools_mgr: tools_mgr.try_apply_thermal_paste()
 
 # ============================================
 # ПОДБОР ДЕТАЛЕЙ
