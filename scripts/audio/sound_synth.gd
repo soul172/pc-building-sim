@@ -11,12 +11,17 @@ extends RefCounted
 static func gen_sound(node: Node, freq: float, duration: float, env_speed: float, volume: float = 0.3) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = duration + 0.05
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -31,10 +36,7 @@ static func gen_sound(node: Node, freq: float, duration: float, env_speed: float
 		var sample = sin(t * freq * TAU) * env * volume
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
-	node.get_tree().create_timer(duration + 0.1).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(duration + 0.1).timeout.connect(ap.queue_free)
 
 static func _gen_sound(node: Node, freq: float, duration: float, env_speed: float, volume: float = 0.3) -> void:
 	gen_sound(node, freq, duration, env_speed, volume)
@@ -61,12 +63,17 @@ static func play_snap(node: Node) -> void:
 static func play_error_sound(node: Node) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.4
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -81,10 +88,7 @@ static func play_error_sound(node: Node) -> void:
 		var sample = sin(t * freq * TAU) * 0.22
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
-	node.get_tree().create_timer(0.5).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(0.5).timeout.connect(ap.queue_free)
 
 static func play_error(node: Node) -> void:
 	play_error_sound(node)
@@ -93,12 +97,17 @@ static func play_error(node: Node) -> void:
 static func play_boot_sound(node: Node) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 1.0
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -113,10 +122,7 @@ static func play_boot_sound(node: Node) -> void:
 		var sample = sin(t * 440.0 * TAU) * env * 0.18
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
-	node.get_tree().create_timer(1.1).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(1.1).timeout.connect(ap.queue_free)
 
 static func play_boot(node: Node) -> void:
 	play_boot_sound(node)
@@ -125,12 +131,17 @@ static func play_boot(node: Node) -> void:
 static func play_screw_sound(node: Node) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.35
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -146,10 +157,7 @@ static func play_screw_sound(node: Node) -> void:
 		var sample = (sin(t * 350.0 * TAU) * 0.5 + noise * 0.5) * env * 0.2
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
-	node.get_tree().create_timer(0.45).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(0.45).timeout.connect(ap.queue_free)
 
 static func play_screw(node: Node) -> void:
 	play_screw_sound(node)
@@ -158,12 +166,17 @@ static func play_screw(node: Node) -> void:
 static func play_paste_sound(node: Node) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.3
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -179,10 +192,7 @@ static func play_paste_sound(node: Node) -> void:
 		var sample = noise * env * 0.15
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
-	node.get_tree().create_timer(0.4).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(0.4).timeout.connect(ap.queue_free)
 
 static func play_paste(node: Node) -> void:
 	play_paste_sound(node)
@@ -198,11 +208,15 @@ static func play_beep(node: Node) -> void:
 static func play_success_sound(node: Node) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
 	for i in range(3):
 		var freq = 440.0 + i * 220.0
-		node.get_tree().create_timer(i * 0.15).timeout.connect(func():
-			if node and is_instance_valid(node):
-				gen_sound(node, freq, 0.12, 15.0, 0.2)
+		tree.create_timer(i * 0.15).timeout.connect(func():
+			if root and is_instance_valid(root):
+				gen_sound(root, freq, 0.12, 15.0, 0.2)
 		)
 
 static func play_success(node: Node) -> void:
@@ -220,13 +234,18 @@ static func play_key_clack(node: Node) -> void:
 static func play_relay_sound(node: Node, is_turning_on: bool) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	var duration = 0.16 if is_turning_on else 0.12
 	stream.buffer_length = duration + 0.05
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -264,10 +283,7 @@ static func play_relay_sound(node: Node, is_turning_on: bool) -> void:
 			data[i] = Vector2(sample, sample)
 
 	playback.push_buffer(data)
-	node.get_tree().create_timer(duration + 0.1).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(duration + 0.1).timeout.connect(ap.queue_free)
 
 static func play_relay(node: Node, is_turning_on: bool) -> void:
 	play_relay_sound(node, is_turning_on)
@@ -276,12 +292,17 @@ static func play_relay(node: Node, is_turning_on: bool) -> void:
 static func play_switch_sound(node: Node) -> void:
 	if not node or not node.is_inside_tree():
 		return
+	var tree = node.get_tree()
+	if not tree:
+		return
+	var root = tree.root
+
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.12
 	stream.mix_rate = 44100
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	node.add_child(ap)
+	root.add_child(ap)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -298,10 +319,7 @@ static func play_switch_sound(node: Node) -> void:
 		var sample = click + noise
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
-	node.get_tree().create_timer(0.15).timeout.connect(func():
-		if ap and is_instance_valid(ap):
-			ap.queue_free()
-	)
+	tree.create_timer(0.15).timeout.connect(ap.queue_free)
 
 static func play_switch(node: Node) -> void:
 	play_switch_sound(node)
