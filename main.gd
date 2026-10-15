@@ -4289,11 +4289,13 @@ func build_wiring_ui():
 	# Если канвас уже существует, очищаем его содержимое без создания дубликата CanvasLayer
 	if wiring_canvas and is_instance_valid(wiring_canvas):
 		for child in wiring_canvas.get_children():
-			child.free()
+			wiring_canvas.remove_child(child)
+			child.queue_free()
 	else:
 		for child in get_children():
 			if child is CanvasLayer and ("WiringCanvas" in child.name):
-				child.free()
+				remove_child(child)
+				child.queue_free()
 
 		wiring_canvas = CanvasLayer.new()
 		wiring_canvas.name = "WiringCanvas"
@@ -4424,7 +4426,7 @@ func build_wiring_ui():
 			dis_sb.corner_radius_bottom_left = 6
 			dis_sb.corner_radius_bottom_right = 6
 			btn.add_theme_stylebox_override("normal", dis_sb)
-			btn.pressed.connect(func(): disconnect_single_cable(cid))
+			btn.pressed.connect(func(): disconnect_single_cable(cid), CONNECT_DEFERRED)
 		elif is_held:
 			btn.text = "Подключить"
 			btn.disabled = false
@@ -4435,11 +4437,11 @@ func build_wiring_ui():
 			btn_sb.corner_radius_bottom_left = 6
 			btn_sb.corner_radius_bottom_right = 6
 			btn.add_theme_stylebox_override("normal", btn_sb)
-			btn.pressed.connect(func(): try_plug_wire_to_socket(cid))
+			btn.pressed.connect(func(): try_plug_wire_to_socket(cid), CONNECT_DEFERRED)
 		else:
 			btn.text = "Взять в руку"
 			btn.disabled = false
-			btn.pressed.connect(func(): grab_wire(cid))
+			btn.pressed.connect(func(): grab_wire(cid), CONNECT_DEFERRED)
 		cvbox.add_child(btn)
 
 	# Колонка с действиями
@@ -4455,7 +4457,7 @@ func build_wiring_ui():
 		all_btn.text = "Подключить все"
 		all_btn.custom_minimum_size = Vector2(0, 36)
 		all_btn.add_theme_font_size_override("font_size", 13)
-		all_btn.pressed.connect(func(): connect_all_cables())
+		all_btn.pressed.connect(func(): connect_all_cables(), CONNECT_DEFERRED)
 		actions_col.add_child(all_btn)
 	else:
 		var done_btn = Button.new()
@@ -4463,7 +4465,7 @@ func build_wiring_ui():
 		done_btn.text = "Завершить монтаж"
 		done_btn.custom_minimum_size = Vector2(0, 42)
 		done_btn.add_theme_font_size_override("font_size", 13)
-		done_btn.pressed.connect(func(): exit_wiring_mode())
+		done_btn.pressed.connect(func(): exit_wiring_mode(), CONNECT_DEFERRED)
 		actions_col.add_child(done_btn)
 
 	var exit_btn = Button.new()
@@ -4471,7 +4473,7 @@ func build_wiring_ui():
 	exit_btn.text = "Отойти (Esc)"
 	exit_btn.custom_minimum_size = Vector2(0, 36)
 	exit_btn.add_theme_font_size_override("font_size", 12)
-	exit_btn.pressed.connect(func(): exit_wiring_mode())
+	exit_btn.pressed.connect(func(): exit_wiring_mode(), CONNECT_DEFERRED)
 	actions_col.add_child(exit_btn)
 
 func connect_single_cable(wire_id: String):

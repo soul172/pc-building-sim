@@ -698,14 +698,14 @@ func build_selected_config(base_config: Dictionary = {}) -> Dictionary:
 		"name": ram_item["name"] + " (Слот A2)",
 		"color": ram_item["color"],
 		"type": ram_item["type"],
-		"price": int(ram_item["price"] / 2)
+		"price": int(ram_item["price"] / 2.0)
 	}
 	cfg["ram2"] = {
 		"id": "ram2",
 		"name": ram_item["name"] + " (Слот B2)",
 		"color": ram_item["color"],
 		"type": ram_item["type"],
-		"price": int(ram_item["price"] / 2)
+		"price": int(ram_item["price"] / 2.0)
 	}
 
 	var gpu_item = catalog["gpu"][config_sel["gpu"]]
