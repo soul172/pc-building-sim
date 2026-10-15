@@ -255,8 +255,20 @@ var psu_front_switch_label: Label3D:
 	get: return power_mgr.psu_front_switch_label if power_mgr else null
 	set(val): if power_mgr: power_mgr.psu_front_switch_label = val
 
-var pc_fan_player: AudioStreamPlayer = null
-var pc_fan_stream: AudioStreamWAV = null
+# ============================================
+# АУДИОСИСТЕМА (ДЕЛЕГИРОВАНО В AUDIO_MANAGER)
+# ============================================
+const AudioManagerScript = preload("res://scripts/audio/audio_manager.gd")
+var audio_mgr = null
+
+var pc_fan_player: AudioStreamPlayer:
+	get: return audio_mgr.pc_fan_player if audio_mgr else null
+	set(val): if audio_mgr: audio_mgr.pc_fan_player = val
+
+var pc_fan_stream: AudioStreamWAV:
+	get: return audio_mgr.pc_fan_stream if audio_mgr else null
+	set(val): if audio_mgr: audio_mgr.pc_fan_stream = val
+
 
 # ============================================
 # ВНЕШНЯЯ ПЕРИФЕРИЯ (ДЕЛЕГИРОВАНО В PERIPHERALS_MANAGER)
@@ -455,6 +467,10 @@ func _ready():
 	boot_mgr.name = "BootManager"
 	boot_mgr.setup(self)
 	add_child(boot_mgr)
+	audio_mgr = AudioManagerScript.new()
+	audio_mgr.name = "AudioManager"
+	audio_mgr.setup(self)
+	add_child(audio_mgr)
 	tools_mgr = ToolsManagerScript.new()
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
@@ -899,60 +915,52 @@ func make_box_on(parent, size, pos, color) -> MeshInstance3D:
 	return world_builder.make_box_on(parent, size, pos, color) if world_builder else null
 
 # ============================================
-# ЗВУКИ (делегированы в SoundSynth)
+# ЗВУКИ (ДЕЛЕГИРОВАНО В AUDIO_MANAGER)
 # ============================================
 func _gen_sound(freq: float, duration: float, env_speed: float, volume: float = 0.3):
-	SoundSynth.gen_sound(self, freq, duration, env_speed, volume)
+	if audio_mgr: audio_mgr.gen_sound(freq, duration, env_speed, volume)
 
 func play_click_sound():
-	SoundSynth.play_click_sound(self)
+	if audio_mgr: audio_mgr.play_click_sound()
 
 func play_snap_sound():
-	SoundSynth.play_snap_sound(self)
+	if audio_mgr: audio_mgr.play_snap_sound()
 
 func play_error_sound():
-	SoundSynth.play_error_sound(self)
+	if audio_mgr: audio_mgr.play_error_sound()
 
 func play_boot_sound():
-	SoundSynth.play_boot_sound(self)
+	if audio_mgr: audio_mgr.play_boot_sound()
 
 func play_screw_sound():
-	SoundSynth.play_screw_sound(self)
+	if audio_mgr: audio_mgr.play_screw_sound()
 
 func play_paste_sound():
-	SoundSynth.play_paste_sound(self)
+	if audio_mgr: audio_mgr.play_paste_sound()
 
 func play_beep_sound():
-	SoundSynth.play_beep_sound(self)
+	if audio_mgr: audio_mgr.play_beep_sound()
 
 func play_success_sound():
-	SoundSynth.play_success_sound(self)
+	if audio_mgr: audio_mgr.play_success_sound()
 
 # ============================================
 # АУДИОСИСТЕМА БП И РАБОТАЮЩЕГО ПК
 # ============================================
 func play_relay_sound(is_turning_on: bool):
-	SoundSynth.play_relay_sound(self, is_turning_on)
+	if audio_mgr: audio_mgr.play_relay_sound(is_turning_on)
 
 func play_switch_sound():
-	SoundSynth.play_switch_sound(self)
+	if audio_mgr: audio_mgr.play_switch_sound()
 
 func _init_pc_fan_sound():
-	if pc_fan_stream != null: return
-	pc_fan_stream = SoundSynth.generate_fan_stream()
-	pc_fan_player = AudioStreamPlayer.new()
-	pc_fan_player.name = "PCFanAmbient"
-	pc_fan_player.stream = pc_fan_stream
-	pc_fan_player.volume_db = -8.0
-	add_child(pc_fan_player)
+	if audio_mgr: audio_mgr.init_pc_fan_sound()
 
 func start_pc_fan_ambient():
-	if not pc_fan_player:
-		_init_pc_fan_sound()
-	SoundSynth.play_fan_sound(pc_fan_player)
+	if audio_mgr: audio_mgr.start_pc_fan_ambient()
 
 func stop_pc_fan_ambient():
-	SoundSynth.stop_fan_sound(pc_fan_player)
+	if audio_mgr: audio_mgr.stop_pc_fan_ambient()
 
 
 
