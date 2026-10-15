@@ -7,7 +7,6 @@ var player: CharacterBody3D
 var camera: Camera3D
 var raycast: RayCast3D
 var held_part = null
-var mouse_sensitivity = 0.002
 var parts = {}
 var slots = {}
 var case_lid_open = false
@@ -26,18 +25,12 @@ var monitor_state: String:
 		if windows_sim:
 			windows_sim.current_state = val
 var monitor_action_cb: Callable = Callable()
-var monitor_camera_focused: bool = false
 var pc_booted = false
 var is_booting = false
 var message_label: Label
 var message_timer = 0.0
 var motherboard_node: Node3D = null
 var motherboard_installed = false
-var target_fov = 75.0
-var current_fov = 75.0
-var zoom_speed = 0.15
-var min_fov = 18.0
-var max_fov = 110.0
 
 # ============================================
 # МЕНЮ И РЕЖИМЫ (ДЕЛЕГИРОВАНО В MAIN_MENU_UI)
@@ -146,6 +139,40 @@ var parts_mgr = null
 # ============================================
 const WorldBuilder3DScript = preload("res://scripts/managers/world_builder_3d.gd")
 var world_builder = null
+
+# ============================================
+# УПРАВЛЕНИЕ КАМЕРОЙ И ИГРОКОМ (ДЕЛЕГИРОВАНО В CAMERA_CONTROLLER)
+# ============================================
+const CameraControllerScript = preload("res://scripts/managers/camera_controller.gd")
+var camera_ctrl = null
+
+var mouse_sensitivity: float:
+	get: return camera_ctrl.mouse_sensitivity if camera_ctrl else 0.002
+	set(val): if camera_ctrl: camera_ctrl.mouse_sensitivity = val
+
+var target_fov: float:
+	get: return camera_ctrl.target_fov if camera_ctrl else 75.0
+	set(val): if camera_ctrl: camera_ctrl.target_fov = val
+
+var current_fov: float:
+	get: return camera_ctrl.current_fov if camera_ctrl else 75.0
+	set(val): if camera_ctrl: camera_ctrl.current_fov = val
+
+var zoom_speed: float:
+	get: return camera_ctrl.zoom_speed if camera_ctrl else 0.15
+	set(val): if camera_ctrl: camera_ctrl.zoom_speed = val
+
+var min_fov: float:
+	get: return camera_ctrl.min_fov if camera_ctrl else 18.0
+	set(val): if camera_ctrl: camera_ctrl.min_fov = val
+
+var max_fov: float:
+	get: return camera_ctrl.max_fov if camera_ctrl else 110.0
+	set(val): if camera_ctrl: camera_ctrl.max_fov = val
+
+var monitor_camera_focused: bool:
+	get: return camera_ctrl.monitor_camera_focused if camera_ctrl else false
+	set(val): if camera_ctrl: camera_ctrl.monitor_camera_focused = val
 
 var tool_held: String:
 	get: return tools_mgr.tool_held if tools_mgr else ""
@@ -423,6 +450,10 @@ func _ready():
 	world_builder.name = "WorldBuilder3D"
 	world_builder.setup(self)
 	add_child(world_builder)
+	camera_ctrl = CameraControllerScript.new()
+	camera_ctrl.name = "CameraController"
+	camera_ctrl.setup(self)
+	add_child(camera_ctrl)
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -723,7 +754,7 @@ func try_interact_monitor() -> bool:
 	return world_builder.try_interact_monitor() if world_builder else false
 
 func toggle_monitor_zoom():
-	if world_builder: world_builder.toggle_monitor_zoom()
+	if camera_ctrl: camera_ctrl.toggle_monitor_zoom()
 
 func build_message_ui():
 	var panel = PanelContainer.new()
@@ -919,24 +950,9 @@ func stop_pc_fan_ambient():
 # ============================================
 # ФИЗИКА И ВВОД
 # ============================================
-func _physics_process(_delta):
+func _physics_process(delta):
 	if not game_started: return
-	if glossary_open: return
-	if in_wiring_mode: return
-	var forward = 0
-	var right = 0
-	if Input.is_key_pressed(KEY_W): forward -= 1
-	if Input.is_key_pressed(KEY_S): forward += 1
-	if Input.is_key_pressed(KEY_A): right -= 1
-	if Input.is_key_pressed(KEY_D): right += 1
-	var direction = (player.transform.basis * Vector3(right, 0, forward)).normalized()
-	if direction:
-		player.velocity.x = direction.x * 3.2
-		player.velocity.z = direction.z * 3.2
-	else:
-		player.velocity.x = move_toward(player.velocity.x, 0, 15)
-		player.velocity.z = move_toward(player.velocity.z, 0, 15)
-	player.move_and_slide()
+	if camera_ctrl: camera_ctrl.process_movement(delta)
 	update_slot_highlights()
 	update_info_card()
 
@@ -958,15 +974,13 @@ func _input(event):
 	if event is InputEventMouseMotion:
 		if in_wiring_mode:
 			handle_wiring_mouse_hover(event.position)
-		elif Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-			player.rotate_y(-event.relative.x * mouse_sensitivity)
-			camera.rotate_x(-event.relative.y * mouse_sensitivity)
-			camera.rotation.x = clamp(camera.rotation.x, -1.2, 1.2)
+		elif camera_ctrl:
+			camera_ctrl.handle_mouse_motion(event.relative)
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			target_fov = max(target_fov - 5.0, min_fov)
+			if camera_ctrl: camera_ctrl.zoom_in()
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			target_fov = min(target_fov + 5.0, max_fov)
+			if camera_ctrl: camera_ctrl.zoom_out()
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			if in_wiring_mode:
 				drop_held_wire()
@@ -1033,8 +1047,8 @@ func _input(event):
 			KEY_ESCAPE:
 				if in_wiring_mode:
 					exit_wiring_mode()
-				else:
-					Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED else Input.MOUSE_MODE_CAPTURED
+				elif camera_ctrl:
+					camera_ctrl.toggle_mouse_mode()
 
 func drop_held_item():
 	if in_wiring_mode:
@@ -1059,8 +1073,7 @@ func _process(delta):
 	if not game_started: return
 
 	# FOV zoom
-	current_fov = lerp(current_fov, target_fov, zoom_speed)
-	camera.fov = current_fov
+	if camera_ctrl: camera_ctrl.process_camera_zoom(delta)
 
 	# Таймер сборки
 	if timer_active:
