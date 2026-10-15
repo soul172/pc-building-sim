@@ -96,37 +96,32 @@ var name_input_ref: LineEdit:
 var current_mode = "free"  # free, guided, test, mistakes
 var game_started = false
 
-# Пошаговый режим
-var guided_steps = [
-	"motherboard",
-	"screwdriver",
-	"cpu",
-	"thermal_paste",
-	"cooler",
-	"ram1",
-	"ram2",
-	"gpu",
-	"ssd",
-	"case_fan",
-	"wiring",
-	"case_lid",
-	"hdmi",
-	"usb_drive",
-	"psu_cable",
-	"psu_switch",
-	"power_button",
-	"windows_install"
-]
-var current_step = 0
+# ============================================
+# ПОШАГОВОЕ ОБУЧЕНИЕ И ОЧКИ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
+# ============================================
+const GuidedStepsManagerScript = preload("res://scripts/managers/guided_steps_manager.gd")
+var guided_mgr = null
+
+var guided_steps: Array:
+	get: return guided_mgr.guided_steps if guided_mgr else []
+	set(val): if guided_mgr: guided_mgr.guided_steps = val
+
+var current_step: int:
+	get: return guided_mgr.current_step if guided_mgr else 0
+	set(val): if guided_mgr: guided_mgr.current_step = val
+
+var score: int:
+	get: return guided_mgr.score if guided_mgr else 100
+	set(val): if guided_mgr: guided_mgr.score = val
+
+var mistakes: int:
+	get: return guided_mgr.mistakes if guided_mgr else 0
+	set(val): if guided_mgr: guided_mgr.mistakes = val
 
 # Таймер
 var build_start_time = 0.0
 var build_end_time = 0.0
 var timer_active = false
-
-# Очки и ошибки
-var score = 100
-var mistakes = 0
 
 # ============================================
 # ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
@@ -533,6 +528,10 @@ func _ready():
 	tips_mgr.name = "TipsManager"
 	tips_mgr.setup(self)
 	add_child(tips_mgr)
+	guided_mgr = GuidedStepsManagerScript.new()
+	guided_mgr.name = "GuidedStepsManager"
+	guided_mgr.setup(self)
+	add_child(guided_mgr)
 	tools_mgr = ToolsManagerScript.new()
 	tools_mgr.name = "ToolsManager"
 	tools_mgr.setup(self)
@@ -1137,72 +1136,19 @@ func update_score_display():
 	if hud_mgr: hud_mgr.update_score_display()
 
 # ============================================
-# ПОШАГОВЫЙ РЕЖИМ
+# ПОШАГОВЫЙ РЕЖИМ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
 # ============================================
 func advance_guided_step():
-	if current_mode != "guided": return
-	current_step += 1
-	while current_step < guided_steps.size():
-		var step = guided_steps[current_step]
-		if step == "motherboard" and slots.has("mb_slot") and slots["mb_slot"]["occupied"]:
-			current_step += 1
-		elif step == "screwdriver" and mb_screwed:
-			current_step += 1
-		elif step == "cpu" and slots.has("cpu") and slots["cpu"]["occupied"]:
-			current_step += 1
-		elif step == "thermal_paste" and thermal_paste_applied:
-			current_step += 1
-		elif step == "cooler" and slots.has("cooler") and slots["cooler"]["occupied"]:
-			current_step += 1
-		elif step == "ram1" and slots.has("ram1") and slots["ram1"]["occupied"]:
-			current_step += 1
-		elif step == "ram2" and slots.has("ram2") and slots["ram2"]["occupied"]:
-			current_step += 1
-		elif step == "gpu" and slots.has("gpu") and slots["gpu"]["occupied"]:
-			current_step += 1
-		elif step == "ssd" and slots.has("ssd") and slots["ssd"]["occupied"]:
-			current_step += 1
-		elif step == "case_fan" and slots.has("case_fan") and slots["case_fan"]["occupied"]:
-			current_step += 1
-		elif step == "wiring" and wire_done:
-			current_step += 1
-		elif step == "case_lid" and not case_lid_open:
-			current_step += 1
-		elif step == "hdmi" and hdmi_cable_connected:
-			current_step += 1
-		elif step == "usb_drive" and usb_drive_plugged:
-			current_step += 1
-		elif step == "psu_cable" and psu_cable_plugged:
-			current_step += 1
-		elif step == "psu_switch" and psu_switch_on:
-			current_step += 1
-		elif step == "power_button" and pc_booted:
-			current_step += 1
-		elif step == "windows_install" and windows_installed:
-			current_step += 1
-		else:
-			break
-	show_step_hint()
+	if guided_mgr: guided_mgr.advance_guided_step()
 
 func show_step_hint():
-	if current_step < guided_steps.size():
-		var next = guided_steps[current_step]
-		var hint = "Шаг %d/%d: %s" % [current_step + 1, guided_steps.size(), get_part_display_name(next)]
-		step_label.text = hint
-		step_label.visible = true
-		show_message(hint)
-	else:
-		step_label.text = "Все шаги завершены! Компьютер собран и запущен!"
-		show_message("Поздравляем! Полная сборка и запуск ПК успешно завершены!")
+	if guided_mgr: guided_mgr.show_step_hint()
 
 # ============================================
-# ОЧКИ И ОШИБКИ
+# ОЧКИ И ОШИБКИ (ДЕЛЕГИРОВАНО В GUIDED_STEPS_MANAGER)
 # ============================================
 func add_mistake():
-	mistakes += 1
-	score = max(0, score - 10)
-	update_score_display()
-	play_error_sound()
+	if guided_mgr: guided_mgr.add_mistake()
 
 # ============================================
 # ТЕСТ ЗНАНИЙ (ДЕЛЕГИРОВАНО В QUIZ_UI)
