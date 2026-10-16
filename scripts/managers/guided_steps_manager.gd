@@ -31,7 +31,6 @@ var guided_steps: Array = [
 	"hdmi",
 	"usb_drive",
 	"psu_cable",
-	"psu_switch",
 	"power_button",
 	"windows_install"
 ]
@@ -94,7 +93,7 @@ func is_step_completed(step: String) -> bool:
 		"psu_cable":
 			return main.psu_cable_plugged
 		"psu_switch":
-			return main.psu_switch_on
+			return true
 		"power_button":
 			return main.pc_booted
 		"windows_install":

@@ -210,17 +210,20 @@ func build_pc_case() -> void:
 	psu_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	pc_case.add_child(psu_lbl)
 
-	# Клавишный тумблер I/O на лицевой стороне БП
-	make_box_on(pc_case, Vector3(0.008, 0.036, 0.028), Vector3(0.023, -0.20, -0.01), Color(0.07, 0.07, 0.09))
+	# Клавишный тумблер I/O на лицевой стороне БП (заглушка: отключен и скрыт)
+	var fswitch_base = make_box_on(pc_case, Vector3(0.008, 0.036, 0.028), Vector3(0.023, -0.20, -0.01), Color(0.07, 0.07, 0.09))
+	fswitch_base.visible = false
 
 	var psu_front_switch_paddle = Node3D.new()
 	psu_front_switch_paddle.name = "PSUFrontSwitchPaddle"
 	psu_front_switch_paddle.position = Vector3(0.026, -0.20, -0.01)
+	psu_front_switch_paddle.visible = false
 	pc_case.add_child(psu_front_switch_paddle)
 	main.psu_front_switch_paddle = psu_front_switch_paddle
 
 	var fpaddle_mesh = make_box_on(psu_front_switch_paddle, Vector3(0.010, 0.026, 0.020), Vector3.ZERO, Color(0.65, 0.15, 0.15))
 	fpaddle_mesh.name = "PaddleMesh"
+	fpaddle_mesh.visible = false
 
 	var psu_front_switch_label = Label3D.new()
 	psu_front_switch_label.font_size = 14
@@ -231,6 +234,7 @@ func build_pc_case() -> void:
 	psu_front_switch_label.rotation_degrees = Vector3(0, 90, 0)
 	psu_front_switch_label.text = "[ 0 ] ВЫКЛ"
 	psu_front_switch_label.modulate = Color(1.0, 0.35, 0.35)
+	psu_front_switch_label.visible = false
 	pc_case.add_child(psu_front_switch_label)
 	main.psu_front_switch_label = psu_front_switch_label
 
@@ -240,9 +244,10 @@ func build_pc_case() -> void:
 	var fswitch_shape = BoxShape3D.new()
 	fswitch_shape.size = Vector3(0.14, 0.14, 0.14)
 	fswitch_col.shape = fswitch_shape
+	fswitch_col.disabled = true
 	fswitch_body.add_child(fswitch_col)
 	fswitch_body.position = Vector3(0.04, -0.20, -0.01)
-	fswitch_body.collision_layer = 2
+	fswitch_body.collision_layer = 0
 	fswitch_body.collision_mask = 0
 	pc_case.add_child(fswitch_body)
 

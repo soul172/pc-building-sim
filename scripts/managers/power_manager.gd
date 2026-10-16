@@ -13,7 +13,12 @@ signal emergency_shutdown_triggered(reason: String)
 
 var main: Node3D = null
 
-var psu_switch_on: bool = false        # Тумблер I/O на БП (Выкл по умолчанию [0])
+var is_psu_switch_on: bool = true:
+	get: return true
+	set(_v): pass
+var psu_switch_on: bool = true:        # Тумблер I/O на БП (Всегда включен по умолчанию [I] заглушкой)
+	get: return true
+	set(_v): pass
 var psu_cable_plugged: bool = false    # Сетевой кабель IEC C13 (Отключен по умолчанию)
 var power_strip_node: Node3D = null
 var psu_cable_node: Node3D = null
@@ -83,18 +88,21 @@ func build_psu_rear_controls() -> void:
 	sock_lbl.rotation_degrees = Vector3(0, 180, 0)
 	pc_case.add_child(sock_lbl)
 
-	# 2. Клавишный тумблер I/O
+	# 2. Клавишный тумблер I/O (заглушка: отключен и скрыт)
 	var switch_pos = Vector3(-0.12, -0.20, -0.245)
-	make_box_on(pc_case, Vector3(0.026, 0.034, 0.008), switch_pos, Color(0.07, 0.07, 0.09))
+	var sw_base = make_box_on(pc_case, Vector3(0.026, 0.034, 0.008), switch_pos, Color(0.07, 0.07, 0.09))
+	sw_base.visible = false
 
 	# Подвижная клавиша тумблера
 	psu_switch_paddle = Node3D.new()
 	psu_switch_paddle.name = "PSUSwitchPaddle"
 	psu_switch_paddle.position = switch_pos
+	psu_switch_paddle.visible = false
 	pc_case.add_child(psu_switch_paddle)
 
 	var paddle_mesh = make_box_on(psu_switch_paddle, Vector3(0.018, 0.024, 0.010), Vector3.ZERO, Color(0.65, 0.15, 0.15))
 	paddle_mesh.name = "PaddleMesh"
+	paddle_mesh.visible = false
 
 	# Коллайдер тумблера
 	var switch_body = StaticBody3D.new()
@@ -103,9 +111,10 @@ func build_psu_rear_controls() -> void:
 	var switch_shape = BoxShape3D.new()
 	switch_shape.size = Vector3(0.12, 0.12, 0.10)
 	switch_col.shape = switch_shape
+	switch_col.disabled = true
 	switch_body.add_child(switch_col)
 	switch_body.position = switch_pos + Vector3(0, 0, -0.015)
-	switch_body.collision_layer = 2
+	switch_body.collision_layer = 0
 	switch_body.collision_mask = 0
 	pc_case.add_child(switch_body)
 
@@ -117,6 +126,7 @@ func build_psu_rear_controls() -> void:
 	psu_switch_label.outline_modulate = Color(0, 0, 0)
 	psu_switch_label.position = switch_pos + Vector3(0, 0.024, -0.002)
 	psu_switch_label.rotation_degrees = Vector3(0, 180, 0)
+	psu_switch_label.visible = false
 	pc_case.add_child(psu_switch_label)
 
 	update_psu_switch_visual()
@@ -168,8 +178,8 @@ func update_psu_switch_visual() -> void:
 		var psu_cfg = main.selected_config.get("psu", {"name":"Corsair RM750e 750W", "wattage":750, "tag":"80+ Gold"})
 		var psu_name = psu_cfg.get("name", "Corsair RM750e 750W")
 		var psu_tag = psu_cfg.get("tag", "80+ GOLD")
-		psu_side_lbl.text = "%s\n%s\nТумблер: %s" % [psu_name, psu_tag, sw_text]
-		psu_side_lbl.modulate = Color(0.2, 1.0, 0.4) if psu_switch_on else Color(1.0, 0.88, 0.3)
+		psu_side_lbl.text = "%s\n%s" % [psu_name, psu_tag]
+		psu_side_lbl.modulate = Color(0.2, 1.0, 0.4)
 
 # ============================================================
 # 2. СЕТЕВОЙ ФИЛЬТР 220V И СИЛОВОЙ КАБЕЛЬ
@@ -325,22 +335,8 @@ func update_psu_cable_visual() -> void:
 # 3. ВЗАИМОДЕЙСТВИЕ И ПЕРЕКЛЮЧЕНИЕ
 # ============================================================
 func toggle_psu_switch() -> void:
-	psu_switch_on = not psu_switch_on
-	if main: main.play_switch_sound()
-	update_psu_switch_visual()
-
-	if psu_switch_on:
-		if main:
-			main.show_message("Тумблер БП переключён в [ I ] (ВКЛЮЧЕНО)!\nДежурная линия +5VSB подана на материнскую плату.")
-			if main.current_mode == "guided" and main.current_step < main.guided_steps.size() and main.guided_steps[main.current_step] == "psu_switch":
-				main.advance_guided_step()
-	else:
-		if main:
-			main.show_message("Тумблер БП переключён в [ 0 ] (ВЫКЛЮЧЕНО).\nПитание системного блока полностью снято.")
-			if main.pc_booted or main.is_booting:
-				main.shutdown_pc_emergency("АВАРИЙНОЕ ОБЕСТОЧИВАНИЕ: Тумблер БП переключён в [0] во время работы ПК!\nРеле БП разомкнуто, дежурное и силовые напряжения мгновенно сняты.")
-
-	psu_switch_toggled.emit(psu_switch_on)
+	# Заглушка: тумблер БП всегда включен
+	psu_switch_toggled.emit(true)
 
 func toggle_psu_cable() -> void:
 	psu_cable_plugged = not psu_cable_plugged
@@ -361,12 +357,7 @@ func toggle_psu_cable() -> void:
 
 	psu_cable_toggled.emit(psu_cable_plugged)
 
-func is_psu_switch(collider: Object) -> bool:
-	if not collider: return false
-	if is_psu_cable_or_socket(collider): return false
-	var valid_names = ["PSUSwitchBody", "PSUCaseBody", "PSUFrontSwitchBody", "PSUBackSwitchBody", "PSUToggleBody", "PSUClickArea"]
-	if collider.name in valid_names: return true
-	if collider.get_parent() and (collider.get_parent().name in valid_names): return true
+func is_psu_switch(_collider: Object) -> bool:
 	return false
 
 func is_psu_cable_or_socket(collider: Object) -> bool:
