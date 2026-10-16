@@ -86,7 +86,7 @@ func build_hud() -> void:
 	keys_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	keys_hint.add_theme_font_size_override("font_size", 12)
 	keys_hint.add_theme_color_override("font_color", Color(0.45, 0.55, 0.7))
-	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  C — кабели БП  |  P — тумблер БП  |  Z — зум  |  6/7 — клавиши  |  G — глоссарий  |  Space — пуск"
+	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  C — кабели БП  |  Z — зум  |  6/7 — клавиши  |  G — глоссарий  |  Space — пуск"
 	hud_canvas.add_child(keys_hint)
 
 	# Карточка характеристик деталей при наведении
