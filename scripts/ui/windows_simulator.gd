@@ -21,6 +21,11 @@ var gpu_name: String = "NVIDIA GeForce RTX 4070 Ti"
 var ram_info: String = "32 GB DDR5-5600 (Dual Channel)"
 var ssd_name: String = "Kingston KC3000 1TB NVMe M.2"
 
+# Данные о термопасте и тепловом режиме CPU
+var has_thermal_paste: bool = true
+var paste_quality: float = 0.65
+var paste_status: String = "optimal"
+
 var video_player: VideoStreamPlayer = null
 var dance_timer: Timer = null
 var content_container: VBoxContainer = null
@@ -37,6 +42,54 @@ func set_hardware_info(cpu: String = "", gpu: String = "", ram: String = "", ssd
 	if gpu != "": gpu_name = gpu
 	if ram != "": ram_info = ram
 	if ssd != "": ssd_name = ssd
+
+func set_thermal_paste_info(applied: bool, quality: float = 0.0, status: String = "") -> void:
+	has_thermal_paste = applied
+	paste_quality = quality
+	paste_status = status
+
+func get_simulated_cpu_temp(under_load: bool = false) -> int:
+	if not has_thermal_paste:
+		return 96 if not under_load else 104
+	match paste_status:
+		"insufficient":
+			return 82 if not under_load else 91
+		"excessive":
+			return 46 if not under_load else 67
+		"optimal", _:
+			return 36 if not under_load else 62
+
+func get_thermal_status_info(under_load: bool = false) -> Dictionary:
+	var temp = get_simulated_cpu_temp(under_load)
+	var status_text = ""
+	var color = Color(0.3, 0.95, 0.6)
+	var summary = ""
+
+	if not has_thermal_paste:
+		status_text = "ТРОТТЛИНГ (100%)"
+		color = Color(1.0, 0.25, 0.25)
+		summary = "КРИТИЧЕСКИЙ ПЕРЕГРЕВ! Термопаста отсутствует — тепло не передается на радиатор."
+	else:
+		match paste_status:
+			"insufficient":
+				status_text = "ПЕРЕГРЕВ / ТРОТТЛИНГ" if under_load else "Высокий нагрев"
+				color = Color(1.0, 0.5, 0.2)
+				summary = "Внимание: слишком мало термопасты — риск перегрева и сброса частот!"
+			"excessive":
+				status_text = "Норма (Избыток пасты)"
+				color = Color(0.95, 0.82, 0.25)
+				summary = "Температуры в пределах нормы, но излишки пасты выдавлены за пределы сокета."
+			"optimal", _:
+				status_text = "Идеально"
+				color = Color(0.3, 0.95, 0.6)
+				summary = "Все компоненты работают стабильно, теплоотвод безупречен."
+
+	return {
+		"temp": temp,
+		"status_text": status_text,
+		"color": color,
+		"summary": summary
+	}
 
 func _set_state(new_state: String):
 	current_state = new_state
@@ -800,17 +853,27 @@ func show_desktop():
 	var sep = HSeparator.new()
 	vb.add_child(sep)
 
+	var thermal_info = get_thermal_status_info(false)
+	var cpu_temp_val = thermal_info["temp"]
+
 	var w_desc = Label.new()
-	w_desc.text = "• Процессор (CPU): %s (34°C, 1.15V)\n• Память (RAM): %s\n• Графика (GPU): %s (32°C, PCIe 4.0)\n• Накопитель: %s (Здоровье: 100%%)\n• Статус системы: Все компоненты работают стабильно." % [cpu_name, ram_info, gpu_name, ssd_name]
+	w_desc.text = "• Процессор (CPU): %s (%d°C, 1.15V) — %s\n• Память (RAM): %s\n• Графика (GPU): %s (32°C, PCIe 4.0)\n• Накопитель: %s (Здоровье: 100%%)\n• Статус системы: %s" % [cpu_name, cpu_temp_val, thermal_info["status_text"], ram_info, gpu_name, ssd_name, thermal_info["summary"]]
 	w_desc.add_theme_font_size_override("font_size", 14)
 	w_desc.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
 	vb.add_child(w_desc)
 
 	benchmark_score_lbl = Label.new()
-	benchmark_score_lbl.text = "3DMark Time Spy Score: 18,450 pts (Ультра 1440p / 4K Gaming Ready)"
+	if not has_thermal_paste:
+		benchmark_score_lbl.text = "Внимание: CPU прогрет до %d°C без нагрузки! Стресс-тест заблокирован термозащитой." % cpu_temp_val
+		benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.3, 0.3))
+	elif paste_status == "insufficient":
+		benchmark_score_lbl.text = "Внимание: Базовая температура %d°C высока. Возможен троттлинг под нагрузкой." % cpu_temp_val
+		benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+	else:
+		benchmark_score_lbl.text = "3DMark Time Spy Score: 18,450 pts (Ультра 1440p / 4K Gaming Ready)"
+		benchmark_score_lbl.add_theme_color_override("font_color", Color(0.3, 0.95, 0.6))
 	benchmark_score_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	benchmark_score_lbl.add_theme_font_size_override("font_size", 15)
-	benchmark_score_lbl.add_theme_color_override("font_color", Color(0.3, 0.95, 0.6))
 	vb.add_child(benchmark_score_lbl)
 
 	var test_btn = Button.new()
@@ -820,12 +883,27 @@ func show_desktop():
 	vb.add_child(test_btn)
 	test_btn.pressed.connect(func():
 		play_click_sound()
-		benchmark_score_lbl.text = "Идет тестирование стабильности оборудования..."
+		benchmark_score_lbl.text = "Идет стресс-тест стабильности и замер температур CPU/GPU..."
 		benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.8, 0.2))
 		get_tree().create_timer(1.2).timeout.connect(func():
-			play_success_sound()
-			benchmark_score_lbl.text = "Стресс-тест пройден! 19,120 pts (Стабильность: 99.8%)"
-			benchmark_score_lbl.add_theme_color_override("font_color", Color(0.3, 0.95, 0.6))
+			var load_thermal = get_thermal_status_info(true)
+			var load_temp = load_thermal["temp"]
+			if not has_thermal_paste:
+				play_error_sound()
+				benchmark_score_lbl.text = "ТЕСТ АВАРИЙНО ПРЕРВАН: CPU %d°C (Троттлинг 100%%)! Сработала термозащита." % load_temp
+				benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.25, 0.25))
+			elif paste_status == "insufficient":
+				play_beep_sound()
+				benchmark_score_lbl.text = "Стресс-тест завершен с троттлингом! CPU: %d°C | 14,200 pts (Снижение частот из-за нехватки пасты)" % load_temp
+				benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.55, 0.15))
+			elif paste_status == "excessive":
+				play_success_sound()
+				benchmark_score_lbl.text = "Стресс-тест пройден! CPU: %d°C | 18,920 pts (Стабильно. Предупреждение: излишки пасты на сокете)" % load_temp
+				benchmark_score_lbl.add_theme_color_override("font_color", Color(0.95, 0.82, 0.25))
+			else:
+				play_success_sound()
+				benchmark_score_lbl.text = "Стресс-тест пройден! CPU: %d°C | 19,120 pts (Идеальное охлаждение, стабильность 99.8%%)" % load_temp
+				benchmark_score_lbl.add_theme_color_override("font_color", Color(0.3, 0.95, 0.6))
 		)
 	)
 

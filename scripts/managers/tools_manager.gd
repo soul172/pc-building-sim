@@ -233,9 +233,12 @@ func try_use_screwdriver() -> void:
 func try_apply_thermal_paste() -> void:
 	if not main: return
 	if not main.slots.has("cpu") or not main.slots["cpu"]["occupied"]:
-		main.show_error("Сначала установите процессор!")
+		main.show_error("Сначала установите процессор в сокет!")
 		return
-	if thermal_paste_applied:
+	if main.slots.has("cooler") and main.slots["cooler"]["occupied"]:
+		main.show_error("Кулер уже установлен! Нельзя нанести пасту на закрытый процессор.")
+		return
+	if thermal_paste_applied or (main.parts_mgr and main.parts_mgr.has_thermal_paste):
 		main.show_message("Термопаста уже нанесена!")
 		drop_tool()
 		return
@@ -246,23 +249,10 @@ func try_apply_thermal_paste() -> void:
 	if not cpu_slot.has("node") or not is_instance_valid(cpu_slot["node"]): return
 	var cpu_world_pos = cpu_slot["node"].global_position
 
-	if hit_pos.distance_to(cpu_world_pos) < 0.5:
-		thermal_paste_applied = true
-		main.play_paste_sound()
-		# Визуальный эффект — серая капля на CPU
-		if main.parts.has("cpu") and is_instance_valid(main.parts["cpu"]):
-			var paste_dot = make_box_on(main.parts["cpu"], Vector3(0.015, 0.003, 0.015), Vector3(0, 0.005, 0), Color(0.7, 0.72, 0.75))
-			paste_dot.name = "PasteDot"
-		drop_tool()
-		if thermal_paste_node and is_instance_valid(thermal_paste_node):
-			thermal_paste_node.visible = false  # Паста использована
-		main.show_message("Термопаста нанесена! Теперь можно устанавливать кулер")
-		main.play_success_sound()
-		if main.current_mode == "guided" and main.current_step < main.guided_steps.size() and main.guided_steps[main.current_step] == "thermal_paste":
-			main.advance_guided_step()
-		thermal_paste_applied_state_changed.emit(true)
+	if hit_pos.distance_to(cpu_world_pos) < 0.65:
+		main.start_thermal_paste_minigame()
 	else:
-		main.show_error("Нажмите E рядом с процессором!")
+		main.show_error("Подойдите ближе и наведите прицел на процессор!")
 
 func reset_motherboard_screws() -> void:
 	mb_screwed = false
@@ -271,9 +261,16 @@ func reset_motherboard_screws() -> void:
 
 func reset_thermal_paste(cpu_part: Node3D = null) -> void:
 	thermal_paste_applied = false
+	if main and main.parts_mgr:
+		main.parts_mgr.has_thermal_paste = false
+		main.parts_mgr.paste_quality = 0.0
+		main.parts_mgr.paste_status = ""
 	if cpu_part and is_instance_valid(cpu_part):
 		var dot = cpu_part.get_node_or_null("PasteDot")
 		if dot: dot.queue_free()
 	if thermal_paste_node and is_instance_valid(thermal_paste_node):
 		thermal_paste_node.visible = true
 	thermal_paste_applied_state_changed.emit(false)
+
+
+

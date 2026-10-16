@@ -15,6 +15,11 @@ signal part_dropped(part: Node3D)
 
 var main: Node3D = null
 
+# Состояние термопасты процессора (CPU)
+var has_thermal_paste: bool = false
+var paste_quality: float = 0.0
+var paste_status: String = ""
+
 func setup(p_main: Node3D) -> void:
 	main = p_main
 
@@ -180,8 +185,10 @@ func pick_up(part: Node3D) -> void:
 	elif p_type == "cooler":
 		if not main.slots["cpu"]["occupied"]:
 			main.show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено оранжевым (сначала установите CPU в сокет!)")
-		elif not main.thermal_paste_applied:
-			main.show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено зелёным (не забудьте нанести термопасту!)")
+		elif not has_thermal_paste:
+			main.show_message("Взяли: " + part.get_meta("name") + "\n[!] Внимание: нанесите термопасту на процессор перед монтажом кулера!")
+			if main.tips_mgr:
+				main.tips_mgr.show_tip("Перед установкой кулера обязательно нанесите термопасту на крышку процессора!", 5.0)
 		else:
 			main.show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено на материнской плате")
 	else:
@@ -261,8 +268,11 @@ func try_install() -> void:
 		var slot = main.slots[id]
 		if slot["occupied"]: continue
 		if slot["type"] != part_type: continue
-		if id == "cooler" and not main.slots["cpu"]["occupied"]:
-			continue
+		if id == "cooler":
+			if not main.slots["cpu"]["occupied"]:
+				continue
+			if not has_thermal_paste:
+				continue
 		var slot_world_pos = slot["node"].global_position
 		var dist = hit_pos.distance_to(slot_world_pos)
 		var max_dist = 0.55 if part_type == "motherboard" else 0.40
@@ -280,6 +290,10 @@ func try_install() -> void:
 		if part_type == "cooler":
 			if not main.slots["cpu"]["occupied"]:
 				main.show_error("Сначала установите процессор в сокет!")
+			elif not has_thermal_paste:
+				main.show_error("Установка кулера заблокирована: сначала нанесите термопасту на процессор!")
+				if main.tips_mgr:
+					main.tips_mgr.show_tip("Без термопасты воздушный зазор приведет к перегреву CPU (до 105°C)!", 6.0)
 			else:
 				main.show_error("Подойдите ближе к слоту кулера на материнской плате")
 		elif part_type == "motherboard" and not main.case_lid_open:
@@ -292,6 +306,15 @@ func install_part(slot_id: String) -> void:
 	if not main or not main.held_part: return
 	var slot = main.slots[slot_id]
 	var part = main.held_part
+
+	if slot_id == "cooler" or part.get_meta("type") == "cooler":
+		if not has_thermal_paste:
+			animate_error_shake(part)
+			main.show_error("Монтаж заблокирован: сначала нанесите термопасту на процессор!")
+			if main.tips_mgr:
+				main.tips_mgr.show_tip("Перед установкой системы охлаждения нанесите термопасту на крышку CPU!", 6.0)
+			main.add_mistake()
+			return
 
 	if not check_compatibility(part, slot):
 		animate_error_shake(part)
@@ -338,10 +361,7 @@ func install_part(slot_id: String) -> void:
 		else:
 			main.show_message("Корпусной вентилятор установлен правильно (ВЫДУВ наружу)! Горячий воздух отводится из корпуса.")
 	elif part.get_meta("type") == "cooler":
-		if not main.thermal_paste_applied:
-			main.show_message("Кулер установлен, но термопаста НЕ была нанесена!\nВнимание: при включении возможен перегрев CPU.")
-		else:
-			main.show_message("Кулер процессора установлен! Охлаждение готово.")
+		main.show_message("Кулер процессора установлен! Охлаждение готово.")
 	else:
 		main.show_message("Установлено: " + part.get_meta("name"))
 
@@ -476,6 +496,9 @@ func extract_part(slot_id: String, depth: int = 0) -> void:
 		main.disconnect_single_cable("gpu_power")
 
 	if slot_id == "cpu":
+		has_thermal_paste = false
+		paste_quality = 0.0
+		paste_status = ""
 		main.thermal_paste_applied = false
 		var dot = part.get_node_or_null("PasteDot")
 		if dot: dot.queue_free()
@@ -545,6 +568,8 @@ func update_slot_highlights() -> void:
 			if matches:
 				if id == "cooler" and not main.slots["cpu"]["occupied"]:
 					mat.albedo_color = Color(1.0, 0.65, 0.1, 0.85)
+				elif id == "cooler" and not has_thermal_paste:
+					mat.albedo_color = Color(1.0, 0.45, 0.15, 0.85)
 				else:
 					mat.albedo_color = Color(0.0, 1.0, 0.5, 0.85)
 			else:

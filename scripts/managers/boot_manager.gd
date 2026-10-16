@@ -105,6 +105,10 @@ func boot_sequence() -> void:
 		var cpu_name_str = main.parts["cpu"].get_meta("name") if main.parts.has("cpu") else "Intel Core i7"
 		var gpu_name_str = main.parts["gpu"].get_meta("name") if main.parts.has("gpu") else "NVIDIA RTX 4070 Ti"
 		var ssd_name_str = main.parts["ssd"].get_meta("name") if main.parts.has("ssd") else "1TB NVMe SSD"
+		var has_tp = main.parts_mgr.has_thermal_paste if main.parts_mgr else main.thermal_paste_applied
+		var tp_qual = main.parts_mgr.paste_quality if main.parts_mgr else 0.0
+		var tp_stat = main.parts_mgr.paste_status if main.parts_mgr else ""
+		main.windows_sim.set_thermal_paste_info(has_tp, tp_qual, tp_stat)
 		main.windows_sim.set_hardware_info(cpu_name_str, gpu_name_str, "32GB DDR5-5600", ssd_name_str)
 
 	if not main.hdmi_cable_connected:
@@ -169,9 +173,10 @@ func boot_sequence() -> void:
 	# BIOS экран
 	main.show_message("BIOS/UEFI: ASUS Z790-P  •  Version 2.15.1234")
 	if main.hdmi_cable_connected:
+		var bios_cpu_temp = main.windows_sim.get_simulated_cpu_temp(false) if main.windows_sim else 35
 		main.set_monitor_screen_bios([
 			"BIOS/UEFI: ASUS TUF GAMING Z790-PLUS  |  Версия 2.15.1234",
-			"CPU: " + main.parts["cpu"].get_meta("name") + " @ 3500 MHz (Температура: 34 C)",
+			"CPU: " + main.parts["cpu"].get_meta("name") + " @ 3500 MHz (Температура: %d C)" % bios_cpu_temp,
 			"RAM: 32GB DDR5-5600  |  Двухканальный режим (Dual Channel OK)",
 			"GPU: " + main.parts["gpu"].get_meta("name") + "  |  12GB GDDR6X (PCIe 4.0 x16 OK)",
 			"SSD: " + main.parts["ssd"].get_meta("name") + "  |  NVMe PCIe 4.0 x4 (1000 GB OK)",

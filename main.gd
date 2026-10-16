@@ -115,8 +115,10 @@ var tool_held: String:
 	set(v): if tools_mgr: tools_mgr.tool_held = v
 
 var thermal_paste_applied: bool:
-	get: return tools_mgr.thermal_paste_applied if tools_mgr else false
-	set(v): if tools_mgr: tools_mgr.thermal_paste_applied = v
+	get: return parts_mgr.has_thermal_paste if (parts_mgr and parts_mgr.has_thermal_paste) else (tools_mgr.thermal_paste_applied if tools_mgr else false)
+	set(v):
+		if parts_mgr: parts_mgr.has_thermal_paste = v
+		if tools_mgr: tools_mgr.thermal_paste_applied = v
 
 var mb_screwed: bool:
 	get: return tools_mgr.mb_screwed if tools_mgr else false
@@ -692,3 +694,51 @@ func show_speedrun_victory_podium(elapsed_seconds: float) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	var ui = _get_or_create_victory_ui()
 	ui.show_speedrun_victory_podium(player_name, elapsed_seconds, mistakes, score, speedrun_records)
+
+# ============================================================
+# МИНИ-ИГРА НАНЕСЕНИЯ ТЕРМОПАСТЫ
+# ============================================================
+func start_thermal_paste_minigame() -> void:
+	if not slots.has("cpu") or not slots["cpu"]["occupied"]:
+		show_error("Сначала установите процессор в сокет!")
+		return
+	if slots.has("cooler") and slots["cooler"]["occupied"]:
+		show_error("Кулер уже установлен! Нельзя нанести пасту на закрытый процессор.")
+		return
+	if parts_mgr and parts_mgr.has_thermal_paste:
+		show_message("Термопаста уже нанесена!")
+		if tools_mgr: tools_mgr.drop_tool()
+		return
+
+	var minigame = ThermalPasteMinigame.new()
+	minigame.paste_applied.connect(_on_thermal_paste_applied)
+	add_child(minigame)
+
+func _on_thermal_paste_applied(quality_score: float, status: String) -> void:
+	if parts_mgr:
+		parts_mgr.has_thermal_paste = true
+		parts_mgr.paste_quality = quality_score
+		parts_mgr.paste_status = status
+	if tools_mgr:
+		tools_mgr.thermal_paste_applied = true
+		tools_mgr.drop_tool()
+		if tools_mgr.thermal_paste_node and is_instance_valid(tools_mgr.thermal_paste_node):
+			tools_mgr.thermal_paste_node.visible = false
+		tools_mgr.thermal_paste_applied_state_changed.emit(true)
+	if parts.has("cpu") and is_instance_valid(parts["cpu"]):
+		var dot = parts["cpu"].get_node_or_null("PasteDot")
+		if not dot and tools_mgr:
+			dot = tools_mgr.make_box_on(parts["cpu"], Vector3(0.016, 0.003, 0.016), Vector3(0, 0.005, 0), Color(0.68, 0.70, 0.73))
+			dot.name = "PasteDot"
+	play_paste_sound()
+	play_success_sound()
+	var pct = int(round(quality_score * 100.0))
+	match status:
+		"optimal": show_message("Термопаста нанесена идеально (%d%%)! Теперь можно устанавливать кулер." % pct)
+		"insufficient": show_message("Термопаста нанесена (%d%%). Внимание: пасты мало — риск перегрева!" % pct)
+		"excessive": show_message("Термопаста нанесена (%d%%). Внимание: излишки выдавятся за пределы сокета!" % pct)
+	if current_mode == "guided" and current_step < guided_steps.size() and guided_steps[current_step] == "thermal_paste":
+		advance_guided_step()
+	if windows_sim:
+		windows_sim.set_thermal_paste_info(true, quality_score, status)
+
