@@ -889,19 +889,19 @@ func show_desktop():
 			var load_thermal = get_thermal_status_info(true)
 			var load_temp = load_thermal["temp"]
 			if not has_thermal_paste:
-				play_error_sound()
+				SoundSynth.play_error_sound(self)
 				benchmark_score_lbl.text = "ТЕСТ АВАРИЙНО ПРЕРВАН: CPU %d°C (Троттлинг 100%%)! Сработала термозащита." % load_temp
 				benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.25, 0.25))
 			elif paste_status == "insufficient":
-				play_beep_sound()
+				SoundSynth.play_beep_sound(self)
 				benchmark_score_lbl.text = "Стресс-тест завершен с троттлингом! CPU: %d°C | 14,200 pts (Снижение частот из-за нехватки пасты)" % load_temp
 				benchmark_score_lbl.add_theme_color_override("font_color", Color(1.0, 0.55, 0.15))
 			elif paste_status == "excessive":
-				play_success_sound()
+				SoundSynth.play_success_sound(self)
 				benchmark_score_lbl.text = "Стресс-тест пройден! CPU: %d°C | 18,920 pts (Стабильно. Предупреждение: излишки пасты на сокете)" % load_temp
 				benchmark_score_lbl.add_theme_color_override("font_color", Color(0.95, 0.82, 0.25))
 			else:
-				play_success_sound()
+				SoundSynth.play_success_sound(self)
 				benchmark_score_lbl.text = "Стресс-тест пройден! CPU: %d°C | 19,120 pts (Идеальное охлаждение, стабильность 99.8%%)" % load_temp
 				benchmark_score_lbl.add_theme_color_override("font_color", Color(0.3, 0.95, 0.6))
 		)
@@ -983,15 +983,16 @@ func _gen_sound(freq: float, duration: float, env_speed: float, volume: float = 
 	)
 
 func play_click_sound():
-	_gen_sound(1800.0, 0.1, 35.0, 0.28)
+	SoundSynth.play_click_sound(self)
+
+func play_error_sound():
+	SoundSynth.play_error_sound(self)
+
+func play_beep_sound():
+	SoundSynth.play_beep_sound(self)
 
 func play_success_sound():
-	var notes = [523.25, 659.25, 783.99, 1046.50]
-	for i in range(notes.size()):
-		var n = notes[i]
-		get_tree().create_timer(i * 0.08).timeout.connect(func():
-			_gen_sound(n, 0.18, 12.0, 0.3)
-		)
+	SoundSynth.play_success_sound(self)
 
 func play_rickroll_tune():
 	var notes = [293.7, 329.6, 392.0, 329.6, 493.9, 440.0, 392.0, 329.6]

@@ -741,4 +741,3 @@ func _on_thermal_paste_applied(quality_score: float, status: String) -> void:
 		advance_guided_step()
 	if windows_sim:
 		windows_sim.set_thermal_paste_info(true, quality_score, status)
-
