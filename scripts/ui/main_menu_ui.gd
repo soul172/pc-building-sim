@@ -5,6 +5,7 @@ extends CanvasLayer
 ## Полноэкранный кибер-интерфейс с выбором режимов, вводом имени и подсказками по управлению
 
 signal mode_selected(mode_id: String, player_name: String)
+signal settings_requested
 
 var name_input_ref: LineEdit = null
 
@@ -216,6 +217,42 @@ func build_ui() -> void:
 	input_sb.content_margin_right = 12
 	name_input_ref.add_theme_stylebox_override("normal", input_sb)
 	name_box.add_child(name_input_ref)
+
+	# Кнопка настроек игры
+	var settings_btn = Button.new()
+	settings_btn.name = "MenuSettingsButton"
+	settings_btn.custom_minimum_size = Vector2(540, 42)
+	settings_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	settings_btn.text = "⚙  Настройки игры (Звук, Графика, Управление)"
+	settings_btn.add_theme_font_size_override("font_size", 13)
+
+	var s_sb = StyleBoxFlat.new()
+	s_sb.bg_color = Color(0.08, 0.12, 0.18, 0.9)
+	s_sb.corner_radius_top_left = 10
+	s_sb.corner_radius_top_right = 10
+	s_sb.corner_radius_bottom_left = 10
+	s_sb.corner_radius_bottom_right = 10
+	s_sb.border_width_left = 1
+	s_sb.border_width_right = 1
+	s_sb.border_width_top = 1
+	s_sb.border_width_bottom = 1
+	s_sb.border_color = Color(0.20, 0.40, 0.65, 0.7)
+	settings_btn.add_theme_stylebox_override("normal", s_sb)
+
+	var s_hover = s_sb.duplicate()
+	s_hover.bg_color = Color(0.12, 0.22, 0.36, 1.0)
+	s_hover.border_color = Color(0.30, 0.75, 1.0, 0.9)
+	settings_btn.add_theme_stylebox_override("hover", s_hover)
+
+	var s_pressed = s_sb.duplicate()
+	s_pressed.bg_color = Color(0.05, 0.08, 0.12, 1.0)
+	settings_btn.add_theme_stylebox_override("pressed", s_pressed)
+
+	settings_btn.pressed.connect(func():
+		SoundSynth.play_click_sound(self)
+		settings_requested.emit()
+	)
+	vbox.add_child(settings_btn)
 
 	# Подсказка по клавишам
 	var hint_panel = PanelContainer.new()

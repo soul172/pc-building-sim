@@ -23,6 +23,11 @@ var quiz_ui: QuizUI = null
 var victory_ui: VictoryUI = null
 var glossary_ui: GlossaryUI = null
 var configurator_panel: ConfiguratorUI = null
+var settings_ui: SettingsUI = null
+var settings_canvas: CanvasLayer = null
+var settings_open: bool:
+	get:
+		return settings_ui != null and is_instance_valid(settings_ui) and settings_ui.visible
 
 # ============================================================
 # СОСТОЯНИЕ 3D-СЦЕНЫ И КОМПОНЕНТОВ
@@ -209,6 +214,7 @@ func _ready() -> void:
 	DisplayServer.window_set_title("PC Building Sim — Симулятор сборки ПК")
 
 	_init_managers()
+	SettingsUI.load_and_apply_saved_settings(camera_ctrl)
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -308,6 +314,7 @@ func build_main_menu() -> void:
 	main_menu_ui = MainMenuUI.new()
 	add_child(main_menu_ui)
 	main_menu_ui.mode_selected.connect(_on_menu_mode_selected)
+	main_menu_ui.settings_requested.connect(open_settings)
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _on_menu_mode_selected(mode: String, p_name: String) -> void:
@@ -410,6 +417,11 @@ func _input(event: InputEvent) -> void:
 	# Пасхалка — Konami Code
 	if tips_mgr and tips_mgr.handle_key_input(event): return
 
+	if settings_open:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+			close_settings()
+		return
+
 	if glossary_open:
 		if glossary_ui and glossary_ui.handle_input(event): return
 		return
@@ -477,6 +489,7 @@ func _input(event: InputEvent) -> void:
 			KEY_Z: if camera_ctrl: camera_ctrl.toggle_monitor_zoom()
 			KEY_ESCAPE:
 				if in_wiring_mode: wiring_mgr.exit_wiring_mode()
+				elif settings_open: close_settings()
 				elif camera_ctrl: camera_ctrl.toggle_mouse_mode()
 
 func _unhandled_key_input(event: InputEvent) -> void:
@@ -664,6 +677,38 @@ func toggle_glossary(tab: String = "glossary") -> void:
 	if not glossary_ui or not is_instance_valid(glossary_ui):
 		build_glossary_panel()
 	glossary_ui.toggle(tab)
+
+# Окно настроек игры
+func open_settings() -> void:
+	if settings_open:
+		close_settings()
+		return
+	if not settings_canvas or not is_instance_valid(settings_canvas):
+		settings_canvas = CanvasLayer.new()
+		settings_canvas.name = "SettingsCanvas"
+		settings_canvas.layer = 60
+		add_child(settings_canvas)
+	if not settings_ui or not is_instance_valid(settings_ui):
+		settings_ui = SettingsUI.new()
+		settings_canvas.add_child(settings_ui)
+		settings_ui.closed.connect(close_settings)
+	settings_ui.open(camera_ctrl)
+
+func close_settings() -> void:
+	if settings_ui and is_instance_valid(settings_ui):
+		settings_ui.close()
+	if settings_canvas and is_instance_valid(settings_canvas):
+		settings_canvas.queue_free()
+		settings_canvas = null
+		settings_ui = null
+	if game_started and not in_wiring_mode and not glossary_open:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+func toggle_settings() -> void:
+	if settings_open:
+		close_settings()
+	else:
+		open_settings()
 
 func show_test() -> void:
 	if not quiz_ui or not is_instance_valid(quiz_ui):

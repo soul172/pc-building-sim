@@ -3,5 +3,7 @@
 .import/
 export_presets.cfg
 build/
+videos/
 *.exe
 *.pck
+*.uid

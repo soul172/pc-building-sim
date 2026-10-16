@@ -35,6 +35,8 @@ func init_pc_fan_sound() -> void:
 	pc_fan_player.name = "PCFanAmbient"
 	pc_fan_player.stream = pc_fan_stream
 	pc_fan_player.volume_db = fan_volume_db
+	if AudioServer.get_bus_index("SFX") != -1:
+		pc_fan_player.bus = "SFX"
 	add_child(pc_fan_player)
 
 ## Запуск фонового гула вентиляторов (с поддержкой мягкого нарастания громкости)

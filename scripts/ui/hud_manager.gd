@@ -86,8 +86,45 @@ func build_hud() -> void:
 	keys_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	keys_hint.add_theme_font_size_override("font_size", 12)
 	keys_hint.add_theme_color_override("font_color", Color(0.45, 0.55, 0.7))
-	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  C — кабели БП  |  Z — зум  |  6/7 — клавиши  |  G — глоссарий  |  Space — пуск"
+	keys_hint.text = "ЛКМ / E — действие  |  ПКМ / X — положить  |  R — повернуть  |  F — крышка  |  C — кабели БП  |  Z — зум  |  G — глоссарий  |  Esc — настройки  |  Space — пуск"
 	hud_canvas.add_child(keys_hint)
+
+	# Кнопка вызова настроек в правом верхнем углу HUD
+	var settings_btn = Button.new()
+	settings_btn.name = "HUDSettingsButton"
+	settings_btn.text = "⚙ Настройки"
+	settings_btn.anchor_left = 1.0
+	settings_btn.anchor_right = 1.0
+	settings_btn.offset_left = -135
+	settings_btn.offset_right = -15
+	settings_btn.offset_top = 15
+	settings_btn.offset_bottom = 45
+	settings_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	settings_btn.add_theme_font_size_override("font_size", 13)
+
+	var s_sb = StyleBoxFlat.new()
+	s_sb.bg_color = Color(0.08, 0.12, 0.20, 0.85)
+	s_sb.border_width_left = 1
+	s_sb.border_width_right = 1
+	s_sb.border_width_top = 1
+	s_sb.border_width_bottom = 1
+	s_sb.border_color = Color(0.25, 0.50, 0.80, 0.7)
+	s_sb.corner_radius_top_left = 6
+	s_sb.corner_radius_top_right = 6
+	s_sb.corner_radius_bottom_left = 6
+	s_sb.corner_radius_bottom_right = 6
+	settings_btn.add_theme_stylebox_override("normal", s_sb)
+
+	var s_hover = s_sb.duplicate()
+	s_hover.bg_color = Color(0.14, 0.24, 0.38, 0.95)
+	s_hover.border_color = Color(0.35, 0.75, 1.0, 0.9)
+	settings_btn.add_theme_stylebox_override("hover", s_hover)
+
+	settings_btn.pressed.connect(func():
+		if main and main.has_method("open_settings"):
+			main.open_settings()
+	)
+	hud_canvas.add_child(settings_btn)
 
 	# Карточка характеристик деталей при наведении
 	info_card = PanelContainer.new()

@@ -12,6 +12,7 @@ var main: Node3D = null
 
 # Параметры чувствительности и обзора
 var mouse_sensitivity: float = 0.002
+var invert_y: bool = false
 var target_fov: float = 75.0
 var current_fov: float = 75.0
 var zoom_speed: float = 0.15
@@ -35,7 +36,8 @@ func handle_mouse_motion(relative: Vector2) -> void:
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED: return
 
 	main.player.rotate_y(-relative.x * mouse_sensitivity)
-	main.camera.rotate_x(-relative.y * mouse_sensitivity)
+	var y_mult: float = 1.0 if invert_y else -1.0
+	main.camera.rotate_x(relative.y * mouse_sensitivity * y_mult)
 	main.camera.rotation.x = clamp(main.camera.rotation.x, pitch_min, pitch_max)
 
 func zoom_in(amount: float = 5.0) -> void:
@@ -83,6 +85,7 @@ func process_camera_zoom(delta: float) -> void:
 
 func process_movement(delta: float) -> void:
 	if not main or not main.player or not main.game_started: return
+	if main.get("settings_open"): return
 	if main.glossary_open: return
 	if main.in_wiring_mode: return
 

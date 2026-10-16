@@ -19,9 +19,7 @@ static func gen_sound(node: Node, freq: float, duration: float, env_speed: float
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = duration + 0.05
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -37,6 +35,14 @@ static func gen_sound(node: Node, freq: float, duration: float, env_speed: float
 		data[i] = Vector2(sample, sample)
 	playback.push_buffer(data)
 	tree.create_timer(duration + 0.1).timeout.connect(ap.queue_free)
+
+static func _create_player(root: Node, stream: AudioStream) -> AudioStreamPlayer:
+	var ap = AudioStreamPlayer.new()
+	ap.stream = stream
+	if AudioServer.get_bus_index("SFX") != -1:
+		ap.bus = "SFX"
+	root.add_child(ap)
+	return ap
 
 static func _gen_sound(node: Node, freq: float, duration: float, env_speed: float, volume: float = 0.3) -> void:
 	gen_sound(node, freq, duration, env_speed, volume)
@@ -71,9 +77,7 @@ static func play_error_sound(node: Node) -> void:
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.4
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -105,9 +109,7 @@ static func play_boot_sound(node: Node) -> void:
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 1.0
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -139,9 +141,7 @@ static func play_screw_sound(node: Node) -> void:
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.35
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -174,9 +174,7 @@ static func play_paste_sound(node: Node) -> void:
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.3
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -243,9 +241,7 @@ static func play_relay_sound(node: Node, is_turning_on: bool) -> void:
 	var duration = 0.16 if is_turning_on else 0.12
 	stream.buffer_length = duration + 0.05
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -300,9 +296,7 @@ static func play_switch_sound(node: Node) -> void:
 	var stream = AudioStreamGenerator.new()
 	stream.buffer_length = 0.12
 	stream.mix_rate = 44100
-	var ap = AudioStreamPlayer.new()
-	ap.stream = stream
-	root.add_child(ap)
+	var ap = _create_player(root, stream)
 	ap.play()
 	var playback = ap.get_stream_playback()
 	if playback == null:
@@ -363,6 +357,8 @@ static func create_fan_player(node: Node) -> AudioStreamPlayer:
 	player.name = "PCFanAmbient"
 	player.stream = stream
 	player.volume_db = -8.0
+	if AudioServer.get_bus_index("SFX") != -1:
+		player.bus = "SFX"
 	node.add_child(player)
 	return player
 
