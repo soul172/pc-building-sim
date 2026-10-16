@@ -2,8 +2,8 @@ class_name ThermalPasteMinigame
 extends Control
 
 ## Мини-игра нанесения термопасты на процессор (CPU IHS).
-## Процедурная отрисовка капель пасты, расчет покрытия по сетке 20x20
-## и оценка качества теплового контакта.
+## Высокопроизводительная отрисовка через Image/ImageTexture (без накопления геометрии)
+## с дискретным расчетом покрытия по сетке 20x20 ячеек.
 
 signal paste_applied(quality_score: float, status: String)
 
@@ -12,6 +12,7 @@ const TOTAL_CELLS: int = 400
 const CANVAS_SIZE: float = 320.0
 const CELL_SIZE: float = CANVAS_SIZE / float(GRID_SIZE) # 16.0 px
 const DROP_RADIUS: float = 16.0
+const MIN_DISTANCE_SQ: float = 36.0 # Порог дистанции между каплями (от 6 px)
 const PASTE_COLOR: Color = Color(0.68, 0.70, 0.73, 0.96)
 
 # Внутренний холст для отрисовки IHS процессора
@@ -27,8 +28,13 @@ class IhsCanvas extends Control:
 			minigame.draw_ihs_canvas(self)
 
 var is_mouse_down: bool = false
-var last_mouse_pos: Vector2 = Vector2(-1, -1)
-var drops: Array[Vector2] = []
+var _last_drop_pos: Vector2 = Vector2(-999, -999)
+
+# Растровый буфер для мгновенной отрисовки пасты
+var paste_image: Image = null
+var paste_texture: ImageTexture = null
+var stamp_image: Image = null
+
 var covered_grid: Array[bool] = []
 var coverage_count: int = 0
 var coverage_percentage: float = 0.0
@@ -57,8 +63,47 @@ func _ready() -> void:
 	anchor_bottom = 1.0
 	mouse_filter = Control.MOUSE_FILTER_STOP
 
+	_init_graphics_buffers()
 	build_ui()
 	_update_metrics()
+
+func _init_graphics_buffers() -> void:
+	# 1. Запекаем круглую каплю пасты размером 33x33 px со сглаживанием и бликом
+	stamp_image = Image.create(33, 33, false, Image.FORMAT_RGBA8)
+	stamp_image.fill(Color(0, 0, 0, 0))
+	var center = Vector2(16.0, 16.0)
+	var r = DROP_RADIUS
+	var r_sq = r * r
+	var highlight_r = r * 0.70
+	var specular_center = center + Vector2(-3.0, -3.0)
+	var specular_r = 3.5
+
+	for y in range(33):
+		for x in range(33):
+			var pos = Vector2(x, y)
+			var d_sq = pos.distance_squared_to(center)
+			if d_sq <= r_sq:
+				var d = sqrt(d_sq)
+				var alpha = 0.96
+				if d > 14.5:
+					alpha *= clampf((16.0 - d) / 1.5, 0.0, 1.0)
+				var col = Color(PASTE_COLOR.r, PASTE_COLOR.g, PASTE_COLOR.b, alpha)
+
+				if d <= highlight_r:
+					var h_t = (1.0 - d / highlight_r) * 0.35
+					col = col.lerp(Color(0.74, 0.76, 0.80, alpha), h_t)
+
+				var s_d = pos.distance_to(specular_center)
+				if s_d <= specular_r:
+					var s_t = (1.0 - s_d / specular_r) * 0.45
+					col = col.lerp(Color(0.90, 0.92, 0.96, alpha), s_t)
+
+				stamp_image.set_pixel(x, y, col)
+
+	# 2. Создаем чистую текстуру IHS 320x320
+	paste_image = Image.create(int(CANVAS_SIZE), int(CANVAS_SIZE), false, Image.FORMAT_RGBA8)
+	paste_image.fill(Color(0, 0, 0, 0))
+	paste_texture = ImageTexture.create_from_image(paste_image)
 
 func _process(delta: float) -> void:
 	if paste_sound_cooldown > 0.0:
@@ -72,10 +117,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			is_mouse_down = false
-			last_mouse_pos = Vector2(-1, -1)
+			_last_drop_pos = Vector2(-999, -999)
 	elif event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE:
-			# Закрытие без подтверждения
 			queue_free()
 
 func build_ui() -> void:
@@ -150,16 +194,15 @@ func build_ui() -> void:
 	socket_center.custom_minimum_size = Vector2(360, 360)
 	vb.add_child(socket_center)
 
-	# Текстурная подложка сокета / текстолита CPU
 	var socket_bg = PanelContainer.new()
 	socket_bg.custom_minimum_size = Vector2(356, 356)
 	var s_sb = StyleBoxFlat.new()
-	s_sb.bg_color = Color(0.12, 0.16, 0.14, 1.0) # Зеленовато-черный текстолит PCB
+	s_sb.bg_color = Color(0.12, 0.16, 0.14, 1.0)
 	s_sb.border_width_left = 6
 	s_sb.border_width_right = 6
 	s_sb.border_width_top = 6
 	s_sb.border_width_bottom = 6
-	s_sb.border_color = Color(0.25, 0.28, 0.32, 1.0) # Металлическая рамка сокета
+	s_sb.border_color = Color(0.25, 0.28, 0.32, 1.0)
 	s_sb.corner_radius_top_left = 10
 	s_sb.corner_radius_top_right = 10
 	s_sb.corner_radius_bottom_left = 10
@@ -201,7 +244,7 @@ func build_ui() -> void:
 	stat_h.add_child(spacer)
 
 	quality_badge = Label.new()
-	quality_badge.text = "[ Слишком мало ]"
+	quality_badge.text = "[ Недостаточно ]"
 	quality_badge.add_theme_font_size_override("font_size", 12)
 	stat_h.add_child(quality_badge)
 
@@ -254,39 +297,77 @@ func handle_canvas_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				is_mouse_down = true
-				_add_paste_drop(event.position)
-				last_mouse_pos = event.position
+				var changed = _add_paste_drop(event.position)
+				_last_drop_pos = event.position
+				paste_texture.update(paste_image)
+				if changed:
+					_update_metrics()
+				if ihs_canvas:
+					ihs_canvas.queue_redraw()
 			else:
 				is_mouse_down = false
-				last_mouse_pos = Vector2(-1, -1)
+				_last_drop_pos = Vector2(-999, -999)
 	elif event is InputEventMouseMotion:
 		if is_mouse_down:
-			if last_mouse_pos != Vector2(-1, -1):
-				_interpolate_drops(last_mouse_pos, event.position)
-			else:
-				_add_paste_drop(event.position)
-			last_mouse_pos = event.position
+			var d_sq = event.position.distance_squared_to(_last_drop_pos)
+			if _last_drop_pos.x < -100.0 or d_sq >= MIN_DISTANCE_SQ:
+				var changed_any = false
+				if _last_drop_pos.x >= 0.0:
+					var dist = sqrt(d_sq)
+					var steps = clampi(int(dist / 6.0), 1, 20)
+					for i in range(1, steps + 1):
+						var pt = _last_drop_pos.lerp(event.position, float(i) / float(steps))
+						if _add_paste_drop(pt):
+							changed_any = true
+				else:
+					if _add_paste_drop(event.position):
+						changed_any = true
 
-func _interpolate_drops(from_pos: Vector2, to_pos: Vector2) -> void:
-	var dist = from_pos.distance_to(to_pos)
-	var steps = clampi(int(dist / 6.0), 1, 30)
-	for i in range(1, steps + 1):
-		var t = float(i) / float(steps)
-		_add_paste_drop(from_pos.lerp(to_pos, t))
+				_last_drop_pos = event.position
+				paste_texture.update(paste_image)
+				if changed_any:
+					_update_metrics()
+				if ihs_canvas:
+					ihs_canvas.queue_redraw()
 
-func _add_paste_drop(pos: Vector2) -> void:
+func _add_paste_drop(pos: Vector2) -> bool:
 	pos.x = clampf(pos.x, 0.0, CANVAS_SIZE)
 	pos.y = clampf(pos.y, 0.0, CANVAS_SIZE)
-	drops.append(pos)
 	_play_paste_sound()
 
-	# Определение покрытых ячеек сетки 20x20
+	# 1. Штампуем каплю в Image буфер
+	var stamp_x = int(pos.x) - 16
+	var stamp_y = int(pos.y) - 16
+	var src_x = 0
+	var src_y = 0
+	var w = 33
+	var h = 33
+
+	if stamp_x < 0:
+		src_x = -stamp_x
+		w += stamp_x
+		stamp_x = 0
+	if stamp_y < 0:
+		src_y = -stamp_y
+		h += stamp_y
+		stamp_y = 0
+	if stamp_x + w > int(CANVAS_SIZE):
+		w = int(CANVAS_SIZE) - stamp_x
+	if stamp_y + h > int(CANVAS_SIZE):
+		h = int(CANVAS_SIZE) - stamp_y
+
+	if w > 0 and h > 0:
+		paste_image.blend_rect(stamp_image, Rect2i(src_x, src_y, w, h), Vector2i(stamp_x, stamp_y))
+
+	# 2. Инкрементальное обновление сетки покрытия 20x20
 	var min_c = clampi(int((pos.x - DROP_RADIUS) / CELL_SIZE), 0, GRID_SIZE - 1)
 	var max_c = clampi(int((pos.x + DROP_RADIUS) / CELL_SIZE), 0, GRID_SIZE - 1)
 	var min_r = clampi(int((pos.y - DROP_RADIUS) / CELL_SIZE), 0, GRID_SIZE - 1)
 	var max_r = clampi(int((pos.y + DROP_RADIUS) / CELL_SIZE), 0, GRID_SIZE - 1)
 
 	var r_sq = DROP_RADIUS * DROP_RADIUS
+	var newly_covered = false
+
 	for r in range(min_r, max_r + 1):
 		for c in range(min_c, max_c + 1):
 			var idx = r * GRID_SIZE + c
@@ -295,10 +376,9 @@ func _add_paste_drop(pos: Vector2) -> void:
 				if pos.distance_squared_to(cell_center) <= r_sq:
 					covered_grid[idx] = true
 					coverage_count += 1
+					newly_covered = true
 
-	_update_metrics()
-	if ihs_canvas:
-		ihs_canvas.queue_redraw()
+	return newly_covered
 
 func _update_metrics() -> void:
 	var quality_score = float(coverage_count) / float(TOTAL_CELLS)
@@ -353,7 +433,12 @@ func _play_paste_sound() -> void:
 		SoundSynth.play_paste_sound(self)
 
 func clear_paste() -> void:
-	drops.clear()
+	if paste_image:
+		paste_image.fill(Color(0, 0, 0, 0))
+	if paste_texture and paste_image:
+		paste_texture.update(paste_image)
+
+	_last_drop_pos = Vector2(-999, -999)
 	for i in range(TOTAL_CELLS):
 		covered_grid[i] = false
 	coverage_count = 0
@@ -389,8 +474,6 @@ func draw_ihs_canvas(canvas: Control) -> void:
 	# Золотой треугольник ориентации сокета
 	canvas.draw_colored_polygon(PackedVector2Array([Vector2(6, 6), Vector2(18, 6), Vector2(6, 18)]), Color(0.95, 0.82, 0.25, 0.6))
 
-	# 2. Процедурная отрисовка капель термопасты
-	for drop_pos in drops:
-		canvas.draw_circle(drop_pos, DROP_RADIUS, PASTE_COLOR)
-		canvas.draw_circle(drop_pos, DROP_RADIUS * 0.70, Color(0.74, 0.76, 0.80, 0.55))
-		canvas.draw_circle(drop_pos + Vector2(-3, -3), 3.5, Color(0.88, 0.90, 0.94, 0.40))
+	# 2. Мгновенная отрисовка запеченной текстуры пасты одним вызовом
+	if paste_texture:
+		canvas.draw_texture(paste_texture, Vector2.ZERO)
