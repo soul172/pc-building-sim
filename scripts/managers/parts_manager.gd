@@ -601,3 +601,148 @@ func animate_error_shake(node: Node3D) -> void:
 		tween.tween_property(node, "position", orig + Vector3(0.015, 0, 0), 0.05)
 		tween.tween_property(node, "position", orig - Vector3(0.015, 0, 0), 0.05)
 	tween.tween_property(node, "position", orig, 0.05)
+
+# ============================================================
+# СПАВН ДЕТАЛЕЙ НА СБОРОЧНЫЙ СТОЛ (ИЗ КОРОБОК / ПРИ СТАРТЕ)
+# ============================================================
+var default_table_positions: Dictionary = {
+	"motherboard": Vector3(0.42, 0.93, -1.90),
+	"gpu": Vector3(0.42, 0.935, -1.48),
+	"cpu": Vector3(0.72, 0.935, -2.10),
+	"cooler": Vector3(0.72, 0.945, -1.82),
+	"ssd": Vector3(0.72, 0.935, -1.55),
+	"ram1": Vector3(0.92, 0.935, -1.95),
+	"ram2": Vector3(1.02, 0.935, -1.95),
+	"case_fan": Vector3(0.97, 0.935, -1.55)
+}
+
+func get_free_table_position(preferred_pos: Vector3) -> Vector3:
+	var pos = preferred_pos
+	var is_occupied = true
+	var attempts = 0
+	while is_occupied and attempts < 15:
+		is_occupied = false
+		for p_id in main.parts:
+			var existing_part = main.parts[p_id]
+			if existing_part and is_instance_valid(existing_part) and existing_part.is_inside_tree():
+				if existing_part.global_position.distance_to(pos) < 0.14:
+					is_occupied = true
+					break
+		if main.motherboard_node and is_instance_valid(main.motherboard_node) and main.motherboard_node.is_inside_tree():
+			if main.motherboard_node.global_position.distance_to(pos) < 0.22:
+				is_occupied = true
+
+		if is_occupied:
+			attempts += 1
+			# Смещение по коврику стола с предотвращением стакинга
+			pos.x = clampf(preferred_pos.x + randf_range(-0.16, 0.16), 0.35, 1.15)
+			pos.z = clampf(preferred_pos.z + randf_range(-0.14, 0.14), -2.20, -1.45)
+
+	return pos
+
+func spawn_items_on_table(items: Array[PCItem]) -> void:
+	for item in items:
+		spawn_part_from_item(item)
+
+func spawn_part_from_item(item: PCItem) -> Node3D:
+	if not main or not item: return null
+
+	var cat = item.category.to_lower()
+	var part_id = item.id
+	if part_id.is_empty():
+		part_id = cat
+
+	# Материнская плата
+	if cat in ["motherboard", "mb"]:
+		if not main.motherboard_node or not is_instance_valid(main.motherboard_node):
+			main.world_builder.build_motherboard()
+		var mb = main.motherboard_node
+		if mb:
+			mb.visible = true
+			var target_pos = get_free_table_position(default_table_positions["motherboard"])
+			mb.position = target_pos
+			mb.set_meta("original_pos", target_pos)
+			_animate_spawn(mb)
+			main.play_click_sound()
+			main.show_message("Распакована материнская плата: " + item.item_name)
+		return mb
+
+	# Блок питания
+	if cat == "psu":
+		main.play_click_sound()
+		if main.psu_side_lbl:
+			main.psu_side_lbl.text = item.item_name
+		main.show_message("Распакован БП: %s\n(Блок питания смонтирован в нижний отсек корпуса)" % item.item_name)
+		return null
+
+	# Видеокарта
+	if cat == "gpu":
+		var target_pos = get_free_table_position(default_table_positions["gpu"])
+		main.world_builder.create_part("gpu", item.item_name, Vector3(0.27, 0.012, 0.04), target_pos, item.color, "gpu", "PCIe")
+		var part = main.parts.get("gpu", null)
+		if part: _animate_spawn(part)
+		main.play_click_sound()
+		main.show_message("Распакована видеокарта: " + item.item_name)
+		return part
+
+	# Процессор
+	if cat == "cpu":
+		var target_pos = get_free_table_position(default_table_positions["cpu"])
+		main.world_builder.create_part("cpu", item.item_name, Vector3(0.04, 0.006, 0.04), target_pos, item.color, "cpu", item.socket)
+		var part = main.parts.get("cpu", null)
+		if part: _animate_spawn(part)
+		main.play_click_sound()
+		main.show_message("Распакован процессор: " + item.item_name)
+		return part
+
+	# Кулер
+	if cat == "cooler":
+		var target_pos = get_free_table_position(default_table_positions["cooler"])
+		main.world_builder.create_part("cooler", item.item_name, Vector3(0.07, 0.05, 0.07), target_pos, item.color, "cooler", item.socket)
+		var part = main.parts.get("cooler", null)
+		if part: _animate_spawn(part)
+		main.play_click_sound()
+		main.show_message("Распакован кулер: " + item.item_name)
+		return part
+
+	# SSD / Накопитель
+	if cat in ["storage", "ssd"]:
+		var target_pos = get_free_table_position(default_table_positions["ssd"])
+		main.world_builder.create_part("ssd", item.item_name, Vector3(0.08, 0.004, 0.025), target_pos, item.color, "ssd", "M2")
+		var part = main.parts.get("ssd", null)
+		if part: _animate_spawn(part)
+		main.play_click_sound()
+		main.show_message("Распакован накопитель: " + item.item_name)
+		return part
+
+	# Оперативная память (RAM)
+	if cat == "ram":
+		var ram_key = "ram1"
+		if main.parts.has("ram1"):
+			ram_key = "ram2"
+		var target_pos = get_free_table_position(default_table_positions.get(ram_key, Vector3(0.92, 0.935, -1.95)))
+		main.world_builder.create_part(ram_key, item.item_name, Vector3(0.012, 0.006, 0.09), target_pos, item.color, "ram", item.ram_type)
+		var part = main.parts.get(ram_key, null)
+		if part: _animate_spawn(part)
+		main.play_click_sound()
+		main.show_message("Распакована планка RAM: " + item.item_name)
+		return part
+
+	# Корпусной вентилятор
+	if cat == "case_fan" or "fan" in part_id:
+		var target_pos = get_free_table_position(default_table_positions["case_fan"])
+		main.world_builder.create_part("case_fan", item.item_name, Vector3(0.06, 0.06, 0.012), target_pos, item.color, "case_fan", "120mm")
+		var part = main.parts.get("case_fan", null)
+		if part: _animate_spawn(part)
+		main.play_click_sound()
+		main.show_message("Распакован корпусной вентилятор: " + item.item_name)
+		return part
+
+	return null
+
+func _animate_spawn(node: Node3D) -> void:
+	if not node or not main: return
+	node.scale = Vector3(0.01, 0.01, 0.01)
+	var tween = main.create_tween()
+	tween.tween_property(node, "scale", Vector3.ONE, 0.22).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+

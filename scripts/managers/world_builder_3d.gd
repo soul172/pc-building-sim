@@ -12,6 +12,7 @@ extends Node
 ## 8. Вспомогательные примитивы (make_box, make_box_on)
 
 var main: Node3D = null
+var shelf_origin: Node3D = null
 
 func setup(p_main: Node3D) -> void:
 	main = p_main
@@ -113,6 +114,76 @@ func build_workbench() -> void:
 	# Лоток для инструментов слева от корпуса
 	make_box(Vector3(0.38, 0.003, 0.36), Vector3(-0.44, 0.931, -1.68), Color(0.12, 0.14, 0.18))
 	make_box(Vector3(0.36, 0.004, 0.34), Vector3(-0.44, 0.9315, -1.68), Color(0.16, 0.19, 0.24))
+
+# ============================================================
+# ЗОНА ПОЛКИ ДОСТАВКИ
+# ============================================================
+func build_delivery_shelf() -> Node3D:
+	if not main: return null
+
+	var shelf_root = Node3D.new()
+	shelf_root.name = "DeliveryShelf"
+	main.add_child(shelf_root)
+
+	# Габариты стеллажа: ширина 1.95м, глубина 0.70м, высота 1.85м
+	# Центр стеллажа слева от стола: X = -2.8, Z = -1.95
+	var shelf_center = Vector3(-2.8, 0.0, -1.95)
+
+	# 4 вертикальных металлических профиля
+	var post_color = Color(0.18, 0.20, 0.24)
+	for dx in [-0.95, 0.95]:
+		for dz in [-0.32, 0.32]:
+			make_box_on(shelf_root, Vector3(0.04, 1.85, 0.04), shelf_center + Vector3(dx, 0.925, dz), post_color)
+
+	# Полки (3 яруса: нижний 0.45м, средний 0.95м, верхний 1.45м)
+	var board_color = Color(0.28, 0.24, 0.20)
+	for y_level in [0.45, 0.95, 1.45]:
+		make_box_on(shelf_root, Vector3(1.94, 0.03, 0.68), shelf_center + Vector3(0, y_level, 0), board_color)
+
+	# Коллизии стеллажа: только горизонтальные полки и задняя стенка (внутреннее пространство открыто!)
+	var shelf_body = StaticBody3D.new()
+	shelf_body.name = "ShelfBody"
+	shelf_body.collision_layer = 1
+	shelf_body.collision_mask = 0
+
+	# 3 горизонтальные полки
+	for y_lvl in [0.45, 0.95, 1.45]:
+		var b_col = CollisionShape3D.new()
+		var b_shape = BoxShape3D.new()
+		b_shape.size = Vector3(1.94, 0.03, 0.68)
+		b_col.shape = b_shape
+		b_col.position = shelf_center + Vector3(0, y_lvl, 0)
+		shelf_body.add_child(b_col)
+
+	# Задний ограничитель (у стены)
+	var back_col = CollisionShape3D.new()
+	var back_shape = BoxShape3D.new()
+	back_shape.size = Vector3(1.94, 1.85, 0.04)
+	back_col.shape = back_shape
+	back_col.position = shelf_center + Vector3(0, 0.925, -0.34)
+	shelf_body.add_child(back_col)
+
+	shelf_root.add_child(shelf_body)
+
+	# Компактная табличка "ЗОНА ДОСТАВКИ"
+	var sign_mesh = make_box_on(shelf_root, Vector3(0.65, 0.08, 0.02), shelf_center + Vector3(0, 1.88, 0.32), Color(0.12, 0.14, 0.18))
+	var sign_label = Label3D.new()
+	sign_label.text = "ЗОНА ДОСТАВКИ"
+	sign_label.pixel_size = 0.001
+	sign_label.font_size = 16
+	sign_label.outline_size = 3
+	sign_label.modulate = Color(0.3, 0.85, 1.0)
+	sign_label.position = Vector3(0, 0, 0.015)
+	sign_mesh.add_child(sign_label)
+
+	# Опорная точка полки (shelf_origin): левый край средней полки
+	# Полка шириной 1.8 м по X, сдвиг рядов по Z
+	shelf_origin = Node3D.new()
+	shelf_origin.name = "ShelfOrigin"
+	shelf_origin.position = Vector3(-3.7, 0.965, -2.11)
+	main.add_child(shelf_origin)
+
+	return shelf_origin
 
 # ============================================================
 # КОРПУС ПК
@@ -443,7 +514,9 @@ func build_player() -> void:
 	var raycast = RayCast3D.new()
 	raycast.target_position = Vector3(0, 0, -5)
 	raycast.enabled = true
-	raycast.collision_mask = 3
+	raycast.collision_mask = 7  # 1: окружение, 2: детали/слоты, 4: коробки доставки
+	raycast.collide_with_areas = true
+	raycast.collide_with_bodies = true
 	camera.add_child(raycast)
 	main.raycast = raycast
 

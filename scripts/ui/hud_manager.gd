@@ -342,6 +342,19 @@ func update_info_card() -> void:
 		info_card_updated.emit(true, info_label.text)
 		return
 
+	# 5.5 Коробка с деталью на полке доставки
+	var box_node = collider
+	while box_node:
+		if box_node is ComponentBox:
+			var item = box_node.item_data
+			var item_name = item.item_name if item else "Комплектующая"
+			var cat_name = item.category.to_upper() if item else "ДЕТАЛЬ"
+			info_label.text = "Коробка: %s [%s]\n\n[E] или [ЛКМ] — Распаковать на сборочный стол" % [item_name, cat_name]
+			info_card.visible = true
+			info_card_updated.emit(true, info_label.text)
+			return
+		box_node = box_node.get_parent()
+
 	# 6. HDMI кабель и порты
 	if main._is_hdmi_interactable(collider):
 		var state_str = "Подключён (видеосигнал активен)" if main.hdmi_cable_connected else "Отключён (на мониторе нет сигнала)"

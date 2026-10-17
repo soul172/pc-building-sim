@@ -18,6 +18,7 @@ var peripherals_mgr: PeripheralsManager = null
 var audio_mgr: AudioManager = null
 var tips_mgr: TipsManager = null
 var wiring_mgr: WiringManager = null
+var delivery_mgr: DeliveryManager = null
 var main_menu_ui: MainMenuUI = null
 var quiz_ui: QuizUI = null
 var victory_ui: VictoryUI = null
@@ -285,6 +286,12 @@ func _init_managers() -> void:
 	camera_ctrl.setup(self)
 	add_child(camera_ctrl)
 
+	delivery_mgr = DeliveryManager.new()
+	delivery_mgr.name = "DeliveryManager"
+	delivery_mgr.setup(self)
+	add_child(delivery_mgr)
+	delivery_mgr.box_unpacked.connect(_on_box_unpacked)
+
 	# Синхронизация состояния пошагового режима при внешних событиях
 	wiring_mgr.wiring_completed.connect(_on_wiring_completed)
 	wiring_mgr.cable_disconnected.connect(func(_id): if guided_mgr: guided_mgr.recalculate_current_step())
@@ -384,22 +391,83 @@ func _launch_game(mode: String) -> void:
 
 	_build_world_and_ui()
 
-	if mode == "guided":
-		current_step = 0
-		show_step_hint()
-	elif mode == "speedrun":
+	var items = get_selected_config_items()
+
+	if mode == "speedrun":
+		# Режим «Сборка на время»: полка пуста, детали сразу появляются на столе
+		if delivery_mgr:
+			delivery_mgr.clear_shelf()
+		world_builder.build_motherboard()
+		world_builder.build_parts_on_table()
 		timer_active = true
 		build_start_time = Time.get_ticks_msec()
 		show_message("СБОРКА НА ВРЕМЯ (SPEEDRUN) НАЧАЛАСЬ!\nЗолото < 1:30  |  Серебро < 2:30  |  Бронза < 4:00")
+	elif mode == "free":
+		# Режим «Свободная сборка»: физическая доставка коробок на стеллаж
+		if delivery_mgr:
+			delivery_mgr.deliver_boxes(items)
+		show_message("СВОБОДНАЯ СБОРКА!\nКомплектующие доставлены в коробках на стеллаж слева.\nПодойдите и нажмите ЛКМ или E для распаковки на стол.")
+	elif mode == "guided":
+		world_builder.build_motherboard()
+		world_builder.build_parts_on_table()
+		current_step = 0
+		show_step_hint()
 	elif mode == "test":
+		world_builder.build_motherboard()
+		world_builder.build_parts_on_table()
 		show_test()
+
+func get_selected_config_items() -> Array[PCItem]:
+	var list: Array[PCItem] = []
+	var cfg = selected_config
+	if cfg.has("mb"):
+		var it = PCItem.from_dict(cfg["mb"], "motherboard")
+		it.category = "motherboard"
+		list.append(it)
+	if cfg.has("cpu"):
+		var it = PCItem.from_dict(cfg["cpu"], "cpu")
+		it.category = "cpu"
+		list.append(it)
+	if cfg.has("cooler"):
+		var it = PCItem.from_dict(cfg["cooler"], "cooler")
+		it.category = "cooler"
+		list.append(it)
+	if cfg.has("ram1"):
+		var it = PCItem.from_dict(cfg["ram1"], "ram")
+		it.category = "ram"
+		list.append(it)
+	if cfg.has("ram2"):
+		var it = PCItem.from_dict(cfg["ram2"], "ram")
+		it.category = "ram"
+		list.append(it)
+	if cfg.has("gpu"):
+		var it = PCItem.from_dict(cfg["gpu"], "gpu")
+		it.category = "gpu"
+		list.append(it)
+	if cfg.has("ssd"):
+		var it = PCItem.from_dict(cfg["ssd"], "storage")
+		it.category = "storage"
+		list.append(it)
+	if cfg.has("psu"):
+		var it = PCItem.from_dict(cfg["psu"], "psu")
+		it.category = "psu"
+		list.append(it)
+	var fan_item = PCItem.new("case_fan", "Корпусной вентилятор 120mm", "case_fan", 25, Color(0.12, 0.12, 0.15))
+	fan_item.tag = "120mm"
+	list.append(fan_item)
+	return list
+
+func _on_box_unpacked(item: PCItem, _world_pos: Vector3) -> void:
+	if parts_mgr:
+		parts_mgr.spawn_part_from_item(item)
 
 func _build_world_and_ui() -> void:
 	world_builder.build_room()
 	world_builder.build_workbench()
+	var shelf_origin = world_builder.build_delivery_shelf()
+	if delivery_mgr:
+		delivery_mgr.set_shelf_origin(shelf_origin)
 	world_builder.build_pc_case()
-	world_builder.build_motherboard()
-	world_builder.build_parts_on_table()
 	tools_mgr.build_tools_on_table()
 	power_mgr.build_power_strip_and_cable()
 	world_builder.build_player()
@@ -517,6 +585,7 @@ func interact() -> void:
 		wiring_mgr.handle_wiring_mouse_click(center_pt)
 		return
 
+	if delivery_mgr and delivery_mgr.try_interact_box(): return
 	if power_mgr and power_mgr.try_interact_power(): return
 	if wiring_mgr and wiring_mgr.try_interact_wiring(): return
 	if peripherals_mgr and peripherals_mgr.try_interact_meme_keyboard(): return
