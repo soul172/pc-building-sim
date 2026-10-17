@@ -36,11 +36,18 @@ static func gen_sound(node: Node, freq: float, duration: float, env_speed: float
 	playback.push_buffer(data)
 	tree.create_timer(duration + 0.1).timeout.connect(ap.queue_free)
 
+static func ensure_sfx_bus() -> void:
+	if AudioServer.get_bus_index("SFX") == -1:
+		var new_idx = AudioServer.bus_count
+		AudioServer.add_bus(new_idx)
+		AudioServer.set_bus_name(new_idx, "SFX")
+		AudioServer.set_bus_send(new_idx, "Master")
+
 static func _create_player(root: Node, stream: AudioStream) -> AudioStreamPlayer:
+	ensure_sfx_bus()
 	var ap = AudioStreamPlayer.new()
 	ap.stream = stream
-	if AudioServer.get_bus_index("SFX") != -1:
-		ap.bus = "SFX"
+	ap.bus = "SFX"
 	root.add_child(ap)
 	return ap
 
@@ -352,13 +359,13 @@ static func generate_fan_stream() -> AudioStreamWAV:
 static func create_fan_player(node: Node) -> AudioStreamPlayer:
 	if not node:
 		return null
+	ensure_sfx_bus()
 	var stream = generate_fan_stream()
 	var player = AudioStreamPlayer.new()
 	player.name = "PCFanAmbient"
 	player.stream = stream
 	player.volume_db = -8.0
-	if AudioServer.get_bus_index("SFX") != -1:
-		player.bus = "SFX"
+	player.bus = "SFX"
 	node.add_child(player)
 	return player
 
