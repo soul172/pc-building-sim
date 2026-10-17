@@ -311,7 +311,8 @@ func update_info_card() -> void:
 		return
 
 	# 2b. Блок питания и внутренние кабели питания (PSU & Wiring)
-	if collider.name == "PSUCaseBody" or (collider.get_parent() and collider.get_parent().name == "PSUCaseBody") or collider.is_in_group("loose_wire_plugs") or (collider.get_parent() and collider.get_parent().is_in_group("loose_wire_plugs")):
+	var is_psu_installed = main.slots.has("psu") and main.slots["psu"].get("occupied", false)
+	if is_psu_installed and (collider.name == "PSUCaseBody" or (collider.get_parent() and collider.get_parent().name == "PSUCaseBody") or collider.is_in_group("loose_wire_plugs") or (collider.get_parent() and collider.get_parent().is_in_group("loose_wire_plugs"))):
 		var wires_cnt = main.connected_wires.size() if main.connected_wires else 0
 		var status_txt = "Все кабели подключены (4/4)" if main.wire_done else "Подключено кабелей: %d/4" % wires_cnt
 		info_label.text = "Блок питания (PSU) и кабели питания\nСостояние: %s\n\n[E], [ЛКМ] или [C] — Открыть режим подключения кабелей (Wiring)\nСовет: Соедините провода 24-Pin ATX, 8-Pin CPU, PCIe и кнопку Front Panel." % status_txt

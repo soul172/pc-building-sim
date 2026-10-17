@@ -853,7 +853,8 @@ func spawn_physical_wire(wire_id: String) -> void:
 func try_interact_wiring() -> bool:
 	if in_wiring_mode or not main or not main.raycast or not main.raycast.is_colliding(): return false
 	var col = main.raycast.get_collider()
-	if not is_instance_valid(col): return false
+	var is_psu_installed = main.slots.has("psu") and main.slots["psu"].get("occupied", false)
+	if not is_psu_installed: return false
 
 	var is_psu = (col.name == "PSUCaseBody" or (col.get_parent() and col.get_parent().name == "PSUCaseBody"))
 	var is_plug = (col.is_in_group("loose_wire_plugs") or (col.get_parent() and col.get_parent().is_in_group("loose_wire_plugs")))
