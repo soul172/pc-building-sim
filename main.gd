@@ -670,6 +670,9 @@ func start_wiring_mode() -> void:
 func build_loose_psu_wires() -> void:
 	if wiring_mgr: wiring_mgr.build_loose_psu_wires()
 
+func clear_loose_psu_wires() -> void:
+	if wiring_mgr: wiring_mgr.clear_loose_psu_wires()
+
 func create_wire_socket_on(id: String, parent: Node3D, pos: Vector3, size: Vector3, display_name: String, color: Color) -> void:
 	if wiring_mgr: wiring_mgr.create_wire_socket_on(id, parent, pos, size, display_name, color)
 

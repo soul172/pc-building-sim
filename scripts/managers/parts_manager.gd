@@ -500,6 +500,18 @@ func extract_part(slot_id: String, depth: int = 0) -> void:
 		main.screw_count = 0
 		main.reset_all_cables()
 
+	if slot_id == "psu":
+		main.reset_all_cables()
+		if main.has_method("clear_loose_psu_wires"):
+			main.clear_loose_psu_wires()
+		elif main.wiring_mgr:
+			for w_node in main.wiring_mgr.loose_wire_nodes.values():
+				if is_instance_valid(w_node):
+					w_node.queue_free()
+			main.wiring_mgr.loose_wire_nodes.clear()
+		if main.psu_side_lbl:
+			main.psu_side_lbl.visible = false
+
 	if slot_id == "gpu":
 		main.disconnect_single_cable("gpu_power")
 

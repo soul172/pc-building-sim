@@ -369,12 +369,15 @@ func create_wire_socket_on(id: String, parent: Node3D, pos: Vector3, size: Vecto
 		"name": display_name
 	}
 
-func build_loose_psu_wires() -> void:
-	if not main or not main.pc_case: return
+func clear_loose_psu_wires() -> void:
 	for node in loose_wire_nodes.values():
 		if is_instance_valid(node):
 			node.queue_free()
 	loose_wire_nodes.clear()
+
+func build_loose_psu_wires() -> void:
+	if not main or not main.pc_case: return
+	clear_loose_psu_wires()
 	var wire_defs = [
 		{
 			"id": "cpu_power",
