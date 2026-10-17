@@ -53,6 +53,7 @@ func get_part_display_name(id: String) -> String:
 		"gpu":             "Видеокарта (в слот PCIe)",
 		"ssd":             "SSD накопитель (в слот M.2)",
 		"case_fan":        "Корпусной вентилятор 120mm (на выдув)",
+		"psu":             "Блок питания ATX (установить в нижний отсек корпуса)",
 		"wiring":          "Кабели питания БП (нажмите [E] на БП или клавишу [C])",
 		"case_lid":        "Боковая крышка корпуса (нажмите F, чтобы закрыть)",
 		"hdmi":            "Кабель HDMI (подключить от видеокарты к монитору)",
@@ -177,11 +178,11 @@ func pick_up(part: Node3D) -> void:
 	part.reparent(main.camera)
 	part.position = Vector3(0.3, -0.28, -0.6)
 	part.rotation = Vector3.ZERO
-	main.play_click_sound()
-
 	var p_type = part.get_meta("type")
 	if p_type == "case_fan":
 		main.show_message("Взяли: " + part.get_meta("name") + "\nНажмите R, чтобы переключить направление потока (Вдув/Выдув)")
+	elif p_type == "psu":
+		main.show_message("Взяли: " + part.get_meta("name") + "\nУстановите в нижний отсек корпуса (подсвечен желтым)")
 	elif p_type == "cooler":
 		if not main.slots["cpu"]["occupied"]:
 			main.show_message("Взяли: " + part.get_meta("name") + "\nМесто установки подсвечено оранжевым (сначала установите CPU в сокет!)")
@@ -343,6 +344,12 @@ func install_part(slot_id: String) -> void:
 		part.basis = Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0))
 		main.motherboard_installed = true
 		main.show_message("Материнская плата в корпусе! Теперь закрепите её отвёрткой (возьмите отвёртку)")
+	elif slot_id == "psu":
+		part.position = slot["position"]
+		part.rotation = Vector3.ZERO
+		if main.psu_side_lbl:
+			main.psu_side_lbl.visible = true
+		main.show_message("Блок питания установлен в корпус! Теперь можно подключать кабели питания.")
 	else:
 		part.position = slot["position"] + Vector3(0, slot["size"].y * 0.5 + 0.002, 0)
 		part.rotation = Vector3.ZERO
@@ -613,7 +620,8 @@ var default_table_positions: Dictionary = {
 	"ssd": Vector3(0.72, 0.935, -1.55),
 	"ram1": Vector3(0.92, 0.935, -1.95),
 	"ram2": Vector3(1.02, 0.935, -1.95),
-	"case_fan": Vector3(0.97, 0.935, -1.55)
+	"case_fan": Vector3(0.97, 0.935, -1.55),
+	"psu": Vector3(0.25, 0.935, -1.45)
 }
 
 func get_free_table_position(preferred_pos: Vector3) -> Vector3:
@@ -667,13 +675,15 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 			main.show_message("Распакована материнская плата: " + item.item_name)
 		return mb
 
-	# Блок питания
+	# Блок питания (PSU)
 	if cat == "psu":
+		var target_pos = get_free_table_position(default_table_positions.get("psu", Vector3(0.25, 0.935, -1.45)))
+		main.world_builder.create_part("psu", item.item_name, Vector3(0.18, 0.07, 0.16), target_pos, item.color, "psu", "ATX")
+		var part = main.parts.get("psu", null)
+		if part: _animate_spawn(part)
 		main.play_click_sound()
-		if main.psu_side_lbl:
-			main.psu_side_lbl.text = item.item_name
-		main.show_message("Распакован БП: %s\n(Блок питания смонтирован в нижний отсек корпуса)" % item.item_name)
-		return null
+		main.show_message("Распакован БП: %s\nВозьмите его [E / ЛКМ] и установите в нижний отсек корпуса!" % item.item_name)
+		return part
 
 	# Видеокарта
 	if cat == "gpu":

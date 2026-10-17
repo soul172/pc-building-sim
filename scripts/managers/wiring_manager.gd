@@ -44,6 +44,9 @@ func start_wiring_mode() -> void:
 	if not main.slots.has("mb_slot") or not main.slots["mb_slot"]["occupied"]:
 		main.show_error("Сначала установите материнскую плату в корпус!")
 		return
+	if main.slots.has("psu") and not main.slots["psu"]["occupied"]:
+		main.show_error("Сначала установите блок питания в корпус!")
+		return
 	in_wiring_mode = true
 	wiring_player_saved_pos = main.player.global_position
 	wiring_player_saved_rot = main.player.rotation

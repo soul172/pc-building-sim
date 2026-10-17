@@ -241,28 +241,13 @@ func build_pc_case() -> void:
 
 	create_slot("mb_slot", Vector3(-0.18, 0.045, 0), Vector3(0.02, 0.35, 0.35), "motherboard")
 	create_slot("case_fan", Vector3(-0.16, 0.12, -0.23), Vector3(0.12, 0.12, 0.02), "case_fan")
+	create_slot("psu", Vector3(-0.08, -0.20, -0.125), Vector3(0.20, 0.07, 0.22), "psu")
 
 	# ====================================================
-	# БЛОК ПИТАНИЯ (PSU) ВНИЗУ КОРПУСА (КОМПАКТНЫЙ, ПОД МАТ. ПЛАТОЙ)
+	# НИЖНИЙ ОТСЕК БЛОКА ПИТАНИЯ (PSU SHROUD)
 	# ====================================================
-	make_box_on(pc_case, Vector3(0.20, 0.07, 0.22), Vector3(-0.08, -0.20, -0.125), Color(0.12, 0.13, 0.16))
-
-	# Коллайдер корпуса БП для прямого взаимодействия
-	var psu_case_body = StaticBody3D.new()
-	psu_case_body.name = "PSUCaseBody"
-	var psu_case_col = CollisionShape3D.new()
-	var psu_case_shape = BoxShape3D.new()
-	psu_case_shape.size = Vector3(0.35, 0.16, 0.35)
-	psu_case_col.shape = psu_case_shape
-	psu_case_body.add_child(psu_case_col)
-	psu_case_body.position = Vector3(0.02, -0.20, -0.10)
-	psu_case_body.collision_layer = 2
-	psu_case_body.collision_mask = 0
-	pc_case.add_child(psu_case_body)
-
-	# Золотой шильдик на боку БП (смотрит в открытую стеклянную крышку)
-	make_box_on(pc_case, Vector3(0.003, 0.048, 0.175), Vector3(0.0215, -0.20, -0.125), Color(0.95, 0.78, 0.18))
-	make_box_on(pc_case, Vector3(0.003, 0.042, 0.167), Vector3(0.0225, -0.20, -0.125), Color(0.07, 0.08, 0.11))
+	# Направляющие / ниша для монтажа БП
+	make_box_on(pc_case, Vector3(0.01, 0.07, 0.22), Vector3(-0.185, -0.20, -0.125), Color(0.10, 0.10, 0.13))
 
 	var psu_cfg = main.selected_config.get("psu", {"name":"Corsair RM750e 750W", "wattage":750, "tag":"80+ Gold"})
 	var psu_lbl = Label3D.new()
@@ -279,6 +264,7 @@ func build_pc_case() -> void:
 	psu_lbl.rotation_degrees = Vector3(0, 90, 0)
 	psu_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	psu_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	psu_lbl.visible = false
 	pc_case.add_child(psu_lbl)
 
 	# Клавишный тумблер I/O на лицевой стороне БП (заглушка: отключен и скрыт)
@@ -459,6 +445,8 @@ func build_parts_on_table() -> void:
 	create_part("ram1",     cfg["ram1"]["name"],   Vector3(0.012, 0.006, 0.09), Vector3(0.92, 0.935, -1.95), cfg["ram1"]["color"],   "ram",      cfg["ram1"].get("type", "DDR5"))
 	create_part("ram2",     cfg["ram2"]["name"],   Vector3(0.012, 0.006, 0.09), Vector3(1.02, 0.935, -1.95), cfg["ram2"]["color"],   "ram",      cfg["ram2"].get("type", "DDR5"))
 	create_part("case_fan", "Корпусной вентилятор 120mm",      Vector3(0.06, 0.06, 0.012),  Vector3(0.97, 0.935, -1.55), Color(0.12, 0.12, 0.15),           "case_fan", "120mm")
+	if cfg.has("psu"):
+		create_part("psu", cfg["psu"]["name"], Vector3(0.18, 0.07, 0.16), Vector3(0.25, 0.935, -1.45), cfg["psu"].get("color", Color(0.12, 0.13, 0.16)), "psu", "ATX")
 
 func create_part(id: String, part_name: String, size: Vector3, pos: Vector3, color: Color, type: String, compat: String = "") -> void:
 	if not main: return

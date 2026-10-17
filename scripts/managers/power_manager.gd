@@ -335,10 +335,16 @@ func update_psu_cable_visual() -> void:
 # 3. ВЗАИМОДЕЙСТВИЕ И ПЕРЕКЛЮЧЕНИЕ
 # ============================================================
 func toggle_psu_switch() -> void:
+	if main and main.slots.has("psu") and not main.slots["psu"]["occupied"]:
+		main.show_error("Сначала установите блок питания в корпус!")
+		return
 	# Заглушка: тумблер БП всегда включен
 	psu_switch_toggled.emit(true)
 
 func toggle_psu_cable() -> void:
+	if not psu_cable_plugged and main and main.slots.has("psu") and not main.slots["psu"]["occupied"]:
+		main.show_error("Сначала установите блок питания в корпус!")
+		return
 	psu_cable_plugged = not psu_cable_plugged
 	update_psu_cable_visual()
 
