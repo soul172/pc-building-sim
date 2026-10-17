@@ -314,12 +314,6 @@ func build_pc_case() -> void:
 	# Интерактивная задняя панель БП: розетка C14 (220V) и клавишный тумблер I/O
 	main.build_psu_rear_controls()
 
-	# Модульные выходы кабелей на БП
-	for z_pos in [-0.20, -0.15, -0.10, -0.05]:
-		make_box_on(pc_case, Vector3(0.032, 0.010, 0.032), Vector3(-0.06, -0.164, z_pos), Color(0.06, 0.06, 0.08))
-
-	# Физические провода, выходящие из БП для ручного подключения
-	main.build_loose_psu_wires()
 
 func toggle_case_lid() -> void:
 	if not main: return
