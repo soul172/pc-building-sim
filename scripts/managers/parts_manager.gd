@@ -349,6 +349,7 @@ func install_part(slot_id: String) -> void:
 		part.rotation = Vector3.ZERO
 		if main.psu_side_lbl:
 			main.psu_side_lbl.visible = true
+		main.build_loose_psu_wires()
 		main.show_message("Блок питания установлен в корпус! Теперь можно подключать кабели питания.")
 	else:
 		part.position = slot["position"] + Vector3(0, slot["size"].y * 0.5 + 0.002, 0)
