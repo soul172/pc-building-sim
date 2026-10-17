@@ -24,20 +24,43 @@ func setup(p_main: Node3D) -> void:
 	main = p_main
 
 func _ready() -> void:
+	SoundSynth.ensure_sfx_bus()
 	init_pc_fan_sound()
 
 ## Инициализация плеера и бесшовного аудиопотока для гула кулеров
 func init_pc_fan_sound() -> void:
 	if pc_fan_stream != null and is_instance_valid(pc_fan_player):
 		return
+	SoundSynth.ensure_sfx_bus()
 	pc_fan_stream = SoundSynth.generate_fan_stream()
 	pc_fan_player = AudioStreamPlayer.new()
 	pc_fan_player.name = "PCFanAmbient"
 	pc_fan_player.stream = pc_fan_stream
 	pc_fan_player.volume_db = fan_volume_db
-	if AudioServer.get_bus_index("SFX") != -1:
-		pc_fan_player.bus = "SFX"
+	pc_fan_player.bus = "SFX"
 	add_child(pc_fan_player)
+
+## Управление общей громкостью звуковых эффектов (линейная 0.0 .. 1.0)
+func set_sfx_volume(linear_vol: float) -> void:
+	sfx_volume_scale = clampf(linear_vol, 0.0, 1.0)
+	SoundSynth.ensure_sfx_bus()
+	var idx = AudioServer.get_bus_index("SFX")
+	if idx != -1:
+		if sfx_volume_scale <= 0.001:
+			AudioServer.set_bus_volume_db(idx, -80.0)
+		else:
+			AudioServer.set_bus_volume_db(idx, linear_to_db(sfx_volume_scale))
+
+## Включение/выключение беззвучного режима для менеджера
+func set_muted(muted: bool) -> void:
+	is_muted = muted
+
+## Применение словаря настроек (например от SettingsUI.settings_applied)
+func apply_settings(data: Dictionary) -> void:
+	if data.has("sfx_volume"):
+		set_sfx_volume(float(data["sfx_volume"]))
+	if data.has("mute"):
+		set_muted(bool(data["mute"]))
 
 ## Запуск фонового гула вентиляторов (с поддержкой мягкого нарастания громкости)
 func start_pc_fan_ambient(smooth: bool = true) -> void:
