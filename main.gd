@@ -29,6 +29,12 @@ var settings_open: bool:
 	get:
 		return settings_ui != null and is_instance_valid(settings_ui) and settings_ui.visible
 
+var thermal_paste_ui: ThermalPasteMinigame = null
+var thermal_paste_canvas: CanvasLayer = null
+var thermal_paste_open: bool:
+	get:
+		return thermal_paste_ui != null and is_instance_valid(thermal_paste_ui)
+
 # ============================================================
 # СОСТОЯНИЕ 3D-СЦЕНЫ И КОМПОНЕНТОВ
 # ============================================================
@@ -422,6 +428,12 @@ func _input(event: InputEvent) -> void:
 			close_settings()
 		return
 
+	if thermal_paste_open:
+		if event is InputEventKey and event.pressed and not event.echo and event.keycode == KEY_ESCAPE:
+			if thermal_paste_ui and is_instance_valid(thermal_paste_ui):
+				thermal_paste_ui.queue_free()
+		return
+
 	if glossary_open:
 		if glossary_ui and glossary_ui.handle_input(event): return
 		return
@@ -754,6 +766,8 @@ func show_speedrun_victory_podium(elapsed_seconds: float) -> void:
 # МИНИ-ИГРА НАНЕСЕНИЯ ТЕРМОПАСТЫ
 # ============================================================
 func start_thermal_paste_minigame() -> void:
+	if is_instance_valid(thermal_paste_ui):
+		return
 	if not slots.has("cpu") or not slots["cpu"]["occupied"]:
 		show_error("Сначала установите процессор в сокет!")
 		return
@@ -765,9 +779,22 @@ func start_thermal_paste_minigame() -> void:
 		if tools_mgr: tools_mgr.drop_tool()
 		return
 
+	if not thermal_paste_canvas or not is_instance_valid(thermal_paste_canvas):
+		thermal_paste_canvas = CanvasLayer.new()
+		thermal_paste_canvas.name = "ThermalPasteCanvas"
+		thermal_paste_canvas.layer = 55
+		add_child(thermal_paste_canvas)
+
 	var minigame = ThermalPasteMinigame.new()
 	minigame.paste_applied.connect(_on_thermal_paste_applied)
-	add_child(minigame)
+	thermal_paste_ui = minigame
+	thermal_paste_canvas.add_child(minigame)
+	minigame.tree_exited.connect(func():
+		thermal_paste_ui = null
+		if thermal_paste_canvas and is_instance_valid(thermal_paste_canvas):
+			thermal_paste_canvas.queue_free()
+			thermal_paste_canvas = null
+	)
 
 func _on_thermal_paste_applied(quality_score: float, status: String) -> void:
 	if parts_mgr:

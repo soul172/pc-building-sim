@@ -1,5 +1,5 @@
 ---
-trigger: always_on
+trigger: manual
 ---
 
 # Архитектурное правило: Умная модульность (Feature-as-a-Module)

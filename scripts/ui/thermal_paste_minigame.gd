@@ -51,6 +51,7 @@ var prev_mouse_mode: int = Input.MOUSE_MODE_CAPTURED
 var paste_sound_cooldown: float = 0.0
 
 func _init() -> void:
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	covered_grid.resize(TOTAL_CELLS)
 	for i in range(TOTAL_CELLS):
 		covered_grid[i] = false
@@ -66,6 +67,9 @@ func _ready() -> void:
 	_init_graphics_buffers()
 	build_ui()
 	_update_metrics()
+
+func _gui_input(event: InputEvent) -> void:
+	accept_event()
 
 func _init_graphics_buffers() -> void:
 	# 1. Запекаем круглую каплю пасты размером 33x33 px со сглаживанием и бликом
@@ -141,6 +145,7 @@ func build_ui() -> void:
 	# 3. Главная панель окна
 	var panel = PanelContainer.new()
 	panel.custom_minimum_size = Vector2(490, 600)
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	var sb = StyleBoxFlat.new()
 	sb.bg_color = Color(0.08, 0.10, 0.15, 0.98)
 	sb.border_width_left = 2
