@@ -37,8 +37,8 @@ func _init() -> void:
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
 func _ready() -> void:
-	build_ui()
 	ensure_audio_buses()
+	build_ui()
 	load_settings()
 
 func _input(event: InputEvent) -> void:
@@ -317,6 +317,10 @@ func _build_audio_tab() -> void:
 		sfx_val_lbl.text = "%d%%" % int(val)
 		if not mute_checkbox.button_pressed:
 			_set_bus_vol("SFX", val / 100.0)
+	)
+	sfx_slider.drag_ended.connect(func(_changed):
+		if not mute_checkbox.button_pressed and sfx_slider.value > 0.0:
+			SoundSynth.play_click_sound(self)
 	)
 
 	# 4. Mute Checkbox
@@ -636,19 +640,14 @@ func apply_settings() -> void:
 		if sfx_slider: _set_bus_vol("SFX", sfx_slider.value / 100.0)
 
 
-	# # Графика
-	# Ищи строку, где обрабатывается Режим экрана (window_mode_option)
+	# Графика
 	if window_mode_option:
 		var win_mode = window_mode_option.get_selected_id()
-	
-	# Проверяем ID: 0 — Оконный режим, 1 — Полноэкранный
-	# (Если у вас в выпадающем списке наоборот, просто поменяйте местами 0 и 1)
 		if win_mode == 1:
 			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
-	else:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-		# Опционально: можно принудительно задать размер окна 1280x720, как написано у вас в UI
-		DisplayServer.window_set_size(Vector2i(1280, 720))
+		else:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_size(Vector2i(1280, 720))
 
 
 
@@ -692,11 +691,14 @@ static func ensure_audio_buses() -> void:
 			AudioServer.set_bus_send(new_idx, "Master")
 
 static func _set_bus_vol(bus_name: String, linear_vol: float) -> void:
+	ensure_audio_buses()
 	var idx = AudioServer.get_bus_index(bus_name)
 	if idx == -1: return
 	if linear_vol <= 0.001:
 		AudioServer.set_bus_volume_db(idx, -80.0)
+		AudioServer.set_bus_mute(idx, true)
 	else:
+		AudioServer.set_bus_mute(idx, false)
 		AudioServer.set_bus_volume_db(idx, linear_to_db(linear_vol))
 
 static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) -> void:
