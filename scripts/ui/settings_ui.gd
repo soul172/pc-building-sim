@@ -635,17 +635,26 @@ func apply_settings() -> void:
 		if music_slider: _set_bus_vol("Music", music_slider.value / 100.0)
 		if sfx_slider: _set_bus_vol("SFX", sfx_slider.value / 100.0)
 
-	# Графика
+
+	# # Графика
+	# Ищи строку, где обрабатывается Режим экрана (window_mode_option)
 	if window_mode_option:
 		var win_mode = window_mode_option.get_selected_id()
+	
+	# Проверяем ID: 0 — Оконный режим, 1 — Полноэкранный
+	# (Если у вас в выпадающем списке наоборот, просто поменяйте местами 0 и 1)
 		if win_mode == 1:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-		else:
-			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	else:
+		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		# Опционально: можно принудительно задать размер окна 1280x720, как написано у вас в UI
+		DisplayServer.window_set_size(Vector2i(1280, 720))
+
+
 
 	if vsync_checkbox:
 		var vsync = vsync_checkbox.button_pressed
-		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_MODE_ENABLED if vsync else DisplayServer.VSYNC_MODE_DISABLED)
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 
 	if fps_option:
 		var fps_lim = fps_option.get_selected_id()
@@ -718,7 +727,7 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 
-	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_MODE_ENABLED if vsync else DisplayServer.VSYNC_MODE_DISABLED)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = fps_lim
 
 	if camera_ctrl and is_instance_valid(camera_ctrl):

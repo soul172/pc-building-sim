@@ -696,13 +696,23 @@ func open_settings() -> void:
 
 func close_settings() -> void:
 	if settings_ui and is_instance_valid(settings_ui):
-		settings_ui.close()
+		#settings_ui.close()
+		pass
 	if settings_canvas and is_instance_valid(settings_canvas):
 		settings_canvas.queue_free()
 		settings_canvas = null
 		settings_ui = null
 	if game_started and not in_wiring_mode and not glossary_open:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		# Этот код вставляем в самый конец функции close_settings() в main.gd:
+	if game_started:
+		# 1. Возвращаем фокус на главное игровое окно
+		get_viewport().set_input_as_handled()
+		# 2. Если для симулятора (с видом от первого лица) нужен захват мыши:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		# 3. И на всякий случай сбрасываем статус нажатия кнопок в самом движке
+		Input.action_release("ui_accept")
+
 
 func toggle_settings() -> void:
 	if settings_open:
