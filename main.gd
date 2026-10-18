@@ -462,8 +462,14 @@ func get_selected_config_items() -> Array[PCItem]:
 	return list
 
 func _on_box_unpacked(item: PCItem, _world_pos: Vector3) -> void:
-	if parts_mgr:
-		parts_mgr.spawn_part_from_item(item)
+	if not item or not parts_mgr:
+		return
+	var part = parts_mgr.spawn_part_from_item(item)
+	if part and is_instance_valid(part):
+		if not part.has_meta("original_pos"):
+			part.set_meta("original_pos", part.position)
+		if guided_mgr and current_mode == "guided":
+			guided_mgr.recalculate_current_step()
 
 func _build_world_and_ui() -> void:
 	world_builder.build_room()
