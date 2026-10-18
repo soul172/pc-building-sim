@@ -637,29 +637,58 @@ var default_table_positions: Dictionary = {
 	"psu": Vector3(0.25, 0.935, -1.45)
 }
 
-func get_free_table_position(preferred_pos: Vector3) -> Vector3:
-	var pos = preferred_pos
-	var is_occupied = true
-	var attempts = 0
-	while is_occupied and attempts < 15:
-		is_occupied = false
-		for p_id in main.parts:
-			var existing_part = main.parts[p_id]
-			if existing_part and is_instance_valid(existing_part) and existing_part.is_inside_tree():
-				if existing_part.global_position.distance_to(pos) < 0.14:
-					is_occupied = true
-					break
-		if main.motherboard_node and is_instance_valid(main.motherboard_node) and main.motherboard_node.is_inside_tree():
+func is_part_installed(part: Node3D) -> bool:
+	return get_slot_for_part(part) != ""
+
+func _is_table_pos_occupied(pos: Vector3, ignore_node: Node3D = null) -> bool:
+	if not main:
+		return false
+
+	# Проверка материнской платы (только если она лежит на столе и не является игнорируемым узлом)
+	if not main.motherboard_installed and main.motherboard_node and is_instance_valid(main.motherboard_node) and main.motherboard_node.is_inside_tree():
+		if main.motherboard_node != ignore_node and main.motherboard_node.visible:
 			if main.motherboard_node.global_position.distance_to(pos) < 0.22:
-				is_occupied = true
+				return true
 
-		if is_occupied:
-			attempts += 1
-			# Смещение по коврику стола с предотвращением стакинга
-			pos.x = clampf(preferred_pos.x + randf_range(-0.16, 0.16), 0.35, 1.15)
-			pos.z = clampf(preferred_pos.z + randf_range(-0.14, 0.14), -2.20, -1.45)
+	# Проверка остальных деталей, реально лежащих на столе
+	for p_id in main.parts:
+		var part = main.parts[p_id]
+		if not part or not is_instance_valid(part) or not part.is_inside_tree() or not part.visible:
+			continue
+		if part == ignore_node:
+			continue
+		if is_part_installed(part):
+			continue
+		if part.global_position.distance_to(pos) < 0.13:
+			return true
 
-	return pos
+	return false
+
+func get_free_table_position(preferred_pos: Vector3, ignore_node: Node3D = null) -> Vector3:
+	if not _is_table_pos_occupied(preferred_pos, ignore_node):
+		return preferred_pos
+
+	# Детерминированный поиск свободного места на верстаке рядом с preferred_pos
+	var offsets = [
+		Vector3(0.14, 0, 0),
+		Vector3(-0.14, 0, 0),
+		Vector3(0, 0, 0.14),
+		Vector3(0, 0, -0.14),
+		Vector3(0.14, 0, 0.14),
+		Vector3(-0.14, 0, -0.14),
+		Vector3(0.14, 0, -0.14),
+		Vector3(-0.14, 0, 0.14),
+		Vector3(0.24, 0, 0),
+		Vector3(-0.24, 0, 0)
+	]
+	for off in offsets:
+		var candidate = preferred_pos + off
+		candidate.x = clampf(candidate.x, 0.25, 1.15)
+		candidate.z = clampf(candidate.z, -2.20, -1.40)
+		if not _is_table_pos_occupied(candidate, ignore_node):
+			return candidate
+
+	return preferred_pos
 
 func spawn_items_on_table(items: Array[PCItem]) -> void:
 	for item in items:
@@ -680,7 +709,7 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var mb = main.motherboard_node
 		if mb:
 			mb.visible = true
-			var target_pos = get_free_table_position(default_table_positions["motherboard"])
+			var target_pos = get_free_table_position(default_table_positions["motherboard"], mb)
 			mb.position = target_pos
 			mb.set_meta("original_pos", target_pos)
 			_animate_spawn(mb)
@@ -693,7 +722,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions.get("psu", Vector3(0.25, 0.935, -1.45)))
 		main.world_builder.create_part("psu", item.item_name, Vector3(0.18, 0.07, 0.16), target_pos, item.color, "psu", "ATX")
 		var part = main.parts.get("psu", null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакован БП: %s\nВозьмите его [E / ЛКМ] и установите в нижний отсек корпуса!" % item.item_name)
 		return part
@@ -703,7 +734,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions["gpu"])
 		main.world_builder.create_part("gpu", item.item_name, Vector3(0.27, 0.012, 0.04), target_pos, item.color, "gpu", "PCIe")
 		var part = main.parts.get("gpu", null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакована видеокарта: " + item.item_name)
 		return part
@@ -713,7 +746,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions["cpu"])
 		main.world_builder.create_part("cpu", item.item_name, Vector3(0.04, 0.006, 0.04), target_pos, item.color, "cpu", item.socket)
 		var part = main.parts.get("cpu", null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакован процессор: " + item.item_name)
 		return part
@@ -723,7 +758,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions["cooler"])
 		main.world_builder.create_part("cooler", item.item_name, Vector3(0.07, 0.05, 0.07), target_pos, item.color, "cooler", item.socket)
 		var part = main.parts.get("cooler", null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакован кулер: " + item.item_name)
 		return part
@@ -733,7 +770,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions["ssd"])
 		main.world_builder.create_part("ssd", item.item_name, Vector3(0.08, 0.004, 0.025), target_pos, item.color, "ssd", "M2")
 		var part = main.parts.get("ssd", null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакован накопитель: " + item.item_name)
 		return part
@@ -746,7 +785,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions.get(ram_key, Vector3(0.92, 0.935, -1.95)))
 		main.world_builder.create_part(ram_key, item.item_name, Vector3(0.012, 0.006, 0.09), target_pos, item.color, "ram", item.ram_type)
 		var part = main.parts.get(ram_key, null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакована планка RAM: " + item.item_name)
 		return part
@@ -756,7 +797,9 @@ func spawn_part_from_item(item: PCItem) -> Node3D:
 		var target_pos = get_free_table_position(default_table_positions["case_fan"])
 		main.world_builder.create_part("case_fan", item.item_name, Vector3(0.06, 0.06, 0.012), target_pos, item.color, "case_fan", "120mm")
 		var part = main.parts.get("case_fan", null)
-		if part: _animate_spawn(part)
+		if part:
+			part.set_meta("original_pos", target_pos)
+			_animate_spawn(part)
 		main.play_click_sound()
 		main.show_message("Распакован корпусной вентилятор: " + item.item_name)
 		return part
