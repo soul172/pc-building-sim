@@ -50,8 +50,42 @@ func make_box_on(parent: Node, size: Vector3, pos: Vector3, color: Color) -> Mes
 # ============================================================
 # КОМНАТА И ОСВЕЩЕНИЕ
 # ============================================================
+func setup_environment() -> void:
+	if not main: return
+	
+	# Проверяем, существует ли уже WorldEnvironment, чтобы не дублировать
+	var existing = main.get_node_or_null("WorldEnvironment")
+	if existing:
+		return
+		
+	var env = Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.07, 0.08, 0.1)
+	
+	# Мягкое фоновое рассеянное освещение (Ambient Light), чтобы тени не были абсолютно чёрными
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.65, 0.72, 0.85)
+	env.ambient_light_energy = 0.3
+	
+	# Кинематографичная тональная компрессия ACES
+	env.tonemap_mode = Environment.TONE_MAPPER_ACES
+	env.tonemap_exposure = 1.05
+	env.tonemap_white = 1.1
+	
+	# Мягкий аккуратный эффект свечения (Glow) для диодов, плафонов и монитора
+	env.glow_enabled = true
+	env.glow_intensity = 0.3
+	env.glow_bloom = 0.12
+	env.glow_blend_mode = Environment.GLOW_BLEND_MODE_SOFTLIGHT
+	
+	var world_env = WorldEnvironment.new()
+	world_env.name = "WorldEnvironment"
+	world_env.environment = env
+	main.add_child(world_env)
+
 func build_room() -> void:
 	if not main: return
+	setup_environment()
 	var floor_body = StaticBody3D.new()
 	var floor_col = CollisionShape3D.new()
 	var floor_shape = BoxShape3D.new()
@@ -66,16 +100,44 @@ func build_room() -> void:
 	build_wall(Vector3(0.1, 3.2, 14), Vector3(7, 1.6, 0))
 	# Потолок
 	make_box(Vector3(14, 0.1, 14), Vector3(0, 3.2, 0), Color(0.25, 0.25, 0.3))
+	
+	# Потолочные LED-панели и источники освещения
+	_create_ceiling_lamp(Vector3(0, 3.16, -1.0), Vector2(1.6, 0.6), 1.5, Color(0.96, 0.97, 1.0), true)
+	_create_ceiling_lamp(Vector3(0, 3.16, 3.2), Vector2(1.6, 0.6), 1.2, Color(0.93, 0.95, 1.0), false)
+	_create_ceiling_lamp(Vector3(-3.2, 3.16, -2.0), Vector2(1.2, 0.5), 1.0, Color(0.92, 0.95, 1.0), false)
+
+func _create_ceiling_lamp(pos: Vector3, size: Vector2, energy: float, light_color: Color = Color(0.95, 0.97, 1.0), enable_shadow: bool = true) -> OmniLight3D:
+	if not main: return null
+	
+	# 1. Тонкий тёмный каркас корпуса светильника
+	make_box(Vector3(size.x + 0.08, 0.03, size.y + 0.08), pos + Vector3(0, 0.015, 0), Color(0.18, 0.20, 0.24))
+	
+	# 2. Светящаяся панель-диффузор с эмиссионным материалом (Glow)
+	var panel = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = Vector3(size.x, 0.02, size.y)
+	panel.mesh = box
+	var mat = StandardMaterial3D.new()
+	mat.albedo_color = light_color
+	mat.emission_enabled = true
+	mat.emission = light_color
+	mat.emission_energy_multiplier = 2.2
+	panel.set_surface_override_material(0, mat)
+	panel.position = pos
+	main.add_child(panel)
+	
+	# 3. Источник света под панелью
 	var light = OmniLight3D.new()
-	light.light_energy = 1.8
-	light.light_color = Color(0.95, 0.95, 1.0)
-	light.position = Vector3(0, 2.8, 0)
+	light.light_color = light_color
+	light.light_energy = energy
+	light.omni_range = 10.5
+	light.omni_attenuation = 1.15
+	light.shadow_enabled = enable_shadow
+	light.shadow_bias = 0.05
+	light.shadow_blur = 1.5
+	light.position = pos - Vector3(0, 0.1, 0)
 	main.add_child(light)
-	var light2 = OmniLight3D.new()
-	light2.light_energy = 0.8
-	light2.light_color = Color(0.7, 0.8, 1.0)
-	light2.position = Vector3(-3, 2.5, -3)
-	main.add_child(light2)
+	return light
 
 func build_wall(size: Vector3, pos: Vector3) -> void:
 	if not main: return
