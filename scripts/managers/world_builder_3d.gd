@@ -244,6 +244,56 @@ func build_workbench() -> void:
 	make_box(Vector3(0.38, 0.003, 0.36), Vector3(-0.44, 0.931, -1.68), Color(0.12, 0.14, 0.18))
 	make_box(Vector3(0.36, 0.004, 0.34), Vector3(-0.44, 0.9315, -1.68), Color(0.16, 0.19, 0.24))
 
+	# Акцентный светильник над верстаком
+	_build_workbench_lamp()
+
+func _build_workbench_lamp() -> void:
+	if not main: return
+	var lamp_root = Node3D.new()
+	lamp_root.name = "WorkbenchWorkLamp"
+	lamp_root.position = Vector3(0.15, 2.5, -1.6)
+
+	# Подвесные тросики от потолка (Y=3.2 до Y=2.5)
+	var wire_color = Color(0.25, 0.27, 0.3)
+	for dx in [-0.65, 0.65]:
+		make_box_on(lamp_root, Vector3(0.008, 0.7, 0.008), Vector3(dx, 0.35, 0), wire_color)
+
+	# Корпус подвесного линейного светильника (тёмный металлический профиль)
+	make_box_on(lamp_root, Vector3(1.5, 0.04, 0.14), Vector3(0, 0, 0), Color(0.14, 0.16, 0.18))
+
+	# Светящаяся рассеивающая линза
+	var lens = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = Vector3(1.44, 0.015, 0.10)
+	lens.mesh = box
+	var mat = StandardMaterial3D.new()
+	var warm_light_color = Color(1.0, 0.98, 0.92)
+	mat.albedo_color = warm_light_color
+	mat.emission_enabled = true
+	mat.emission = warm_light_color
+	mat.emission_energy_multiplier = 2.4
+	lens.set_surface_override_material(0, mat)
+	lens.position = Vector3(0, -0.02, 0)
+	lamp_root.add_child(lens)
+
+	# Направленный рабочий прожектор SpotLight3D на стол, коврик и открытый корпус ПК
+	var spot = SpotLight3D.new()
+	spot.name = "WorkbenchSpot"
+	spot.light_color = warm_light_color
+	spot.light_energy = 1.8
+	spot.spot_range = 3.6
+	spot.spot_angle = 48.0
+	spot.spot_angle_attenuation = 1.05
+	spot.shadow_enabled = true
+	spot.shadow_bias = 0.03
+	spot.shadow_blur = 1.2
+	spot.position = Vector3(0, -0.03, 0)
+	# Наклон вперёд-вниз к корпусу и коврику верстака
+	spot.rotation_degrees = Vector3(-68, 0, 0)
+	lamp_root.add_child(spot)
+
+	main.add_child(lamp_root)
+
 # ============================================================
 # ЗОНА ПОЛКИ ДОСТАВКИ
 # ============================================================
