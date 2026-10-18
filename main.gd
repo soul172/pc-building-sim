@@ -392,6 +392,8 @@ func _launch_game(mode: String) -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 	_build_world_and_ui()
+	if world_builder:
+		world_builder.set_shadows_enabled(SettingsUI.is_shadows_enabled())
 
 	var items = get_selected_config_items()
 
