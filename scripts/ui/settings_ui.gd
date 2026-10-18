@@ -24,6 +24,7 @@ var mute_checkbox: CheckButton = null
 var window_mode_option: OptionButton = null
 var vsync_checkbox: CheckButton = null
 var fps_option: OptionButton = null
+var shadows_checkbox: CheckButton = null
 
 var sens_slider: HSlider = null
 var sens_val_lbl: Label = null
@@ -69,7 +70,7 @@ func build_ui() -> void:
 
 	# Основная карточка модального окна (Glassmorphism Cyber Theme)
 	var card = PanelContainer.new()
-	card.custom_minimum_size = Vector2(660, 520)
+	card.custom_minimum_size = Vector2(660, 540)
 	var card_sb = StyleBoxFlat.new()
 	card_sb.bg_color = Color(0.07, 0.10, 0.17, 0.96)
 	card_sb.corner_radius_top_left = 16
@@ -139,7 +140,7 @@ func build_ui() -> void:
 	# --- ВКЛАДКИ (TAB CONTAINER) ---
 	tab_container = TabContainer.new()
 	tab_container.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	tab_container.custom_minimum_size = Vector2(600, 290)
+	tab_container.custom_minimum_size = Vector2(600, 310)
 	
 	# Стилизация вкладок TabContainer
 	var tab_panel = StyleBoxFlat.new()
@@ -418,6 +419,24 @@ func _build_graphics_tab() -> void:
 	fps_option.add_item("Без ограничений (Максимум)", 0)
 	fps_box.add_child(fps_option)
 
+	# 4. Shadows
+	var shadow_box = HBoxContainer.new()
+	shadow_box.add_theme_constant_override("separation", 14)
+	tab.add_child(shadow_box)
+
+	var lbl_shadow = Label.new()
+	lbl_shadow.text = "Освещение и тени:"
+	lbl_shadow.custom_minimum_size = Vector2(230, 0)
+	lbl_shadow.add_theme_font_size_override("font_size", 13)
+	shadow_box.add_child(lbl_shadow)
+
+	shadows_checkbox = CheckButton.new()
+	shadows_checkbox.text = "Включить динамические тени"
+	shadows_checkbox.button_pressed = true
+	shadows_checkbox.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	shadows_checkbox.add_theme_font_size_override("font_size", 13)
+	shadow_box.add_child(shadows_checkbox)
+
 # ============================================================
 # ВКЛАДКА «ИГРА» (GAMEPLAY)
 # ============================================================
@@ -529,6 +548,8 @@ func reset_to_defaults() -> void:
 	if fps_option:
 		var idx = fps_option.get_item_index(60)
 		if idx != -1: fps_option.select(idx)
+	if shadows_checkbox:
+		shadows_checkbox.button_pressed = true
 
 	if sens_slider:
 		sens_slider.value = 100.0
@@ -577,6 +598,7 @@ func save_settings() -> void:
 	if window_mode_option: cfg.set_value("graphics", "window_mode", window_mode_option.get_selected_id())
 	if vsync_checkbox: cfg.set_value("graphics", "vsync", vsync_checkbox.button_pressed)
 	if fps_option: cfg.set_value("graphics", "fps_limit", fps_option.get_selected_id())
+	if shadows_checkbox: cfg.set_value("graphics", "shadows", shadows_checkbox.button_pressed)
 
 	if sens_slider: cfg.set_value("gameplay", "mouse_sensitivity_pct", sens_slider.value)
 	if invert_y_checkbox: cfg.set_value("gameplay", "invert_y", invert_y_checkbox.button_pressed)
@@ -597,6 +619,7 @@ func load_settings() -> void:
 	var win_mode: int = cfg.get_value("graphics", "window_mode", 0) if err == OK else 0
 	var vsync: bool = cfg.get_value("graphics", "vsync", true) if err == OK else true
 	var fps_lim: int = cfg.get_value("graphics", "fps_limit", 60) if err == OK else 60
+	var shadows_enabled: bool = cfg.get_value("graphics", "shadows", true) if err == OK else true
 
 	var sens_pct: float = cfg.get_value("gameplay", "mouse_sensitivity_pct", 100.0) if err == OK else 100.0
 	var inv_y: bool = cfg.get_value("gameplay", "invert_y", false) if err == OK else false
@@ -618,6 +641,8 @@ func load_settings() -> void:
 		if idx != -1: window_mode_option.select(idx)
 	if vsync_checkbox:
 		vsync_checkbox.button_pressed = vsync
+	if shadows_checkbox:
+		shadows_checkbox.button_pressed = shadows_enabled
 	if fps_option:
 		var idx = fps_option.get_item_index(fps_lim)
 		if idx != -1: fps_option.select(idx)
@@ -666,6 +691,8 @@ func apply_settings() -> void:
 		if invert_y_checkbox:
 			camera_ctrl_ref.invert_y = invert_y_checkbox.button_pressed
 
+	var is_shadows: bool = shadows_checkbox.button_pressed if shadows_checkbox else true
+
 	settings_applied.emit({
 		"master_volume": master_slider.value / 100.0 if master_slider else 1.0,
 		"music_volume": music_slider.value / 100.0 if music_slider else 0.8,
@@ -674,6 +701,7 @@ func apply_settings() -> void:
 		"window_mode": window_mode_option.get_selected_id() if window_mode_option else 0,
 		"vsync": vsync_checkbox.button_pressed if vsync_checkbox else true,
 		"fps_limit": fps_option.get_selected_id() if fps_option else 60,
+		"shadows": is_shadows,
 		"mouse_sensitivity": (sens_slider.value / 100.0) * 0.002 if sens_slider else 0.002,
 		"invert_y": invert_y_checkbox.button_pressed if invert_y_checkbox else false
 	})
@@ -701,7 +729,13 @@ static func _set_bus_vol(bus_name: String, linear_vol: float) -> void:
 		AudioServer.set_bus_mute(idx, false)
 		AudioServer.set_bus_volume_db(idx, linear_to_db(linear_vol))
 
-static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) -> void:
+static func is_shadows_enabled() -> bool:
+	var cfg = ConfigFile.new()
+	if cfg.load(SETTINGS_FILE) == OK:
+		return cfg.get_value("graphics", "shadows", true)
+	return true
+
+static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) -> Dictionary:
 	ensure_audio_buses()
 	var cfg = ConfigFile.new()
 	var err = cfg.load(SETTINGS_FILE)
@@ -714,6 +748,7 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 	var win_mode: int = cfg.get_value("graphics", "window_mode", 0) if err == OK else 0
 	var vsync: bool = cfg.get_value("graphics", "vsync", true) if err == OK else true
 	var fps_lim: int = cfg.get_value("graphics", "fps_limit", 60) if err == OK else 60
+	var shadows_enabled: bool = cfg.get_value("graphics", "shadows", true) if err == OK else true
 
 	var sens_pct: float = cfg.get_value("gameplay", "mouse_sensitivity_pct", 100.0) if err == OK else 100.0
 	var inv_y: bool = cfg.get_value("gameplay", "invert_y", false) if err == OK else false
@@ -735,3 +770,10 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 	if camera_ctrl and is_instance_valid(camera_ctrl):
 		camera_ctrl.mouse_sensitivity = (sens_pct / 100.0) * 0.002
 		camera_ctrl.invert_y = inv_y
+
+	return {
+		"shadows": shadows_enabled,
+		"window_mode": win_mode,
+		"vsync": vsync,
+		"fps_limit": fps_lim
+	}
