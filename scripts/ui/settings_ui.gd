@@ -692,6 +692,7 @@ func apply_settings() -> void:
 			camera_ctrl_ref.invert_y = invert_y_checkbox.button_pressed
 
 	var is_shadows: bool = shadows_checkbox.button_pressed if shadows_checkbox else true
+	apply_rendering_shadows(get_viewport(), is_shadows)
 
 	settings_applied.emit({
 		"master_volume": master_slider.value / 100.0 if master_slider else 1.0,
@@ -735,6 +736,12 @@ static func is_shadows_enabled() -> bool:
 		return cfg.get_value("graphics", "shadows", true)
 	return true
 
+static func apply_rendering_shadows(viewport: Viewport, enabled: bool) -> void:
+	if not viewport:
+		return
+	viewport.positional_shadow_atlas_size = 4096 if enabled else 0
+	viewport.positional_shadow_atlas_16_bits = enabled
+
 static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) -> Dictionary:
 	ensure_audio_buses()
 	var cfg = ConfigFile.new()
@@ -766,6 +773,10 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if vsync else DisplayServer.VSYNC_DISABLED)
 	Engine.max_fps = fps_lim
+
+	var main_loop = Engine.get_main_loop()
+	if main_loop is SceneTree and main_loop.root:
+		apply_rendering_shadows(main_loop.root, shadows_enabled)
 
 	if camera_ctrl and is_instance_valid(camera_ctrl):
 		camera_ctrl.mouse_sensitivity = (sens_pct / 100.0) * 0.002

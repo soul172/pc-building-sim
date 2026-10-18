@@ -78,7 +78,6 @@ func build_ui() -> void:
 
 	# Значок над заголовком
 	var badge = Label.new()
-	badge.text = "3D ИНТЕРАКТИВНЫЙ СИМУЛЯТОР"
 	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	badge.add_theme_font_size_override("font_size", 12)
 	badge.add_theme_color_override("font_color", Color(0.3, 0.85, 1.0))
@@ -95,7 +94,6 @@ func build_ui() -> void:
 	vbox.add_child(title)
 
 	var subtitle = Label.new()
-	subtitle.text = "Реалистичный 3D-симулятор сборки персонального компьютера"
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	subtitle.add_theme_font_size_override("font_size", 14)
 	subtitle.add_theme_color_override("font_color", Color(0.65, 0.75, 0.88))
@@ -112,28 +110,24 @@ func build_ui() -> void:
 		{
 			"id": "free",
 			"title": "Свободная сборка",
-			"desc": "Собери ПК мечты без ограничений • Полный конфигуратор деталей",
 			"hover_color": Color(0.12, 0.26, 0.44, 1.0),
 			"border_color": Color(0.25, 0.70, 1.0, 0.85)
 		},
 		{
 			"id": "guided",
 			"title": "Пошаговый режим",
-			"desc": "Интерактивное обучение: подсказки от сокета до первого старта ПК",
 			"hover_color": Color(0.10, 0.28, 0.22, 1.0),
 			"border_color": Color(0.25, 0.90, 0.60, 0.85)
 		},
 		{
 			"id": "speedrun",
 			"title": "Сборка на время (Speedrun)",
-			"desc": "Гонка со временем! Нормативы: Золото (<1:30), Серебро (<2:30), Бронза (<4:00) и пьедестал",
 			"hover_color": Color(0.35, 0.22, 0.05, 1.0),
 			"border_color": Color(1.0, 0.8, 0.2, 0.85)
 		},
 		{
 			"id": "test",
 			"title": "Тест знаний по железу",
-			"desc": "Проверь себя — 7 экзаменационных вопросов по архитектуре ПК",
 			"hover_color": Color(0.26, 0.16, 0.38, 1.0),
 			"border_color": Color(0.75, 0.45, 0.95, 0.85)
 		}
@@ -143,7 +137,7 @@ func build_ui() -> void:
 		var btn = Button.new()
 		btn.custom_minimum_size = Vector2(540, 56)
 		btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		btn.text = "%s\n%s" % [m["title"], m["desc"]]
+		btn.text = "%s" % [m["title"]]
 		btn.add_theme_font_size_override("font_size", 14)
 
 		var normal_sb = StyleBoxFlat.new()
