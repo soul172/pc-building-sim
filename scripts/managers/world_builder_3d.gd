@@ -13,6 +13,8 @@ extends Node
 
 var main: Node3D = null
 var shelf_origin: Node3D = null
+var room_lights: Array[OmniLight3D] = []
+var shadows_enabled: bool = true
 
 func setup(p_main: Node3D) -> void:
 	main = p_main
@@ -85,6 +87,7 @@ func setup_environment() -> void:
 
 func build_room() -> void:
 	if not main: return
+	shadows_enabled = SettingsUI.is_shadows_enabled()
 	setup_environment()
 	var floor_body = StaticBody3D.new()
 	var floor_col = CollisionShape3D.new()
@@ -134,12 +137,23 @@ func _create_ceiling_lamp(pos: Vector3, size: Vector2, energy: float, light_colo
 	light.light_energy = energy
 	light.omni_range = 10.5
 	light.omni_attenuation = 1.15
-	light.shadow_enabled = enable_shadow
+	light.set_meta("base_shadow_enabled", enable_shadow)
+	light.shadow_enabled = enable_shadow and shadows_enabled
 	light.shadow_bias = 0.05
 	light.shadow_blur = 1.5
 	light.position = pos - Vector3(0, 0.05, 0)
 	main.add_child(light)
+	room_lights.append(light)
 	return light
+
+func set_shadows_enabled(p_enabled: bool) -> void:
+	shadows_enabled = p_enabled
+	for light in room_lights:
+		if is_instance_valid(light):
+			var base_enabled: bool = true
+			if light.has_meta("base_shadow_enabled"):
+				base_enabled = light.get_meta("base_shadow_enabled")
+			light.shadow_enabled = base_enabled and shadows_enabled
 
 func build_wall(size: Vector3, pos: Vector3) -> void:
 	if not main: return
