@@ -221,7 +221,9 @@ func _ready() -> void:
 	DisplayServer.window_set_title("PC Building Sim — Симулятор сборки ПК")
 
 	_init_managers()
-	SettingsUI.load_and_apply_saved_settings(camera_ctrl)
+	var applied_settings = SettingsUI.load_and_apply_saved_settings(camera_ctrl)
+	if applied_settings.has("shadows") and world_builder:
+		world_builder.set_shadows_enabled(applied_settings["shadows"])
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -776,7 +778,12 @@ func open_settings() -> void:
 		settings_ui = SettingsUI.new()
 		settings_canvas.add_child(settings_ui)
 		settings_ui.closed.connect(close_settings)
+		settings_ui.settings_applied.connect(_on_settings_applied)
 	settings_ui.open(camera_ctrl)
+
+func _on_settings_applied(settings_data: Dictionary) -> void:
+	if settings_data.has("shadows") and world_builder:
+		world_builder.set_shadows_enabled(settings_data["shadows"])
 
 func close_settings() -> void:
 	if settings_ui and is_instance_valid(settings_ui):
