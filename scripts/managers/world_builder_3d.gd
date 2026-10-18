@@ -87,7 +87,74 @@ func build_wall(size: Vector3, pos: Vector3) -> void:
 	body.add_child(col)
 	body.position = pos
 	main.add_child(body)
-	make_box(size, pos, Color(0.28, 0.28, 0.33))
+	
+	var mesh_inst = MeshInstance3D.new()
+	var box = BoxMesh.new()
+	box.size = size
+	mesh_inst.mesh = box
+	mesh_inst.set_surface_override_material(0, _get_or_create_wall_material())
+	mesh_inst.position = pos
+	main.add_child(mesh_inst)
+
+var _wall_material: StandardMaterial3D = null
+
+func _get_or_create_wall_material() -> StandardMaterial3D:
+	if _wall_material:
+		return _wall_material
+	_wall_material = StandardMaterial3D.new()
+	var tex = _load_wall_texture()
+	if tex:
+		_wall_material.albedo_texture = tex
+		_wall_material.albedo_color = Color.WHITE
+		_wall_material.uv1_triplanar = true
+		_wall_material.uv1_scale = Vector3(0.35, 0.35, 0.35)
+		_wall_material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	else:
+		_wall_material.albedo_color = Color(0.28, 0.28, 0.33)
+	return _wall_material
+
+func _load_wall_texture() -> Texture2D:
+	var dir_path = "res://textures/walls"
+	var dir = DirAccess.open(dir_path)
+	if not dir:
+		return null
+	
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	var candidates: Array[String] = []
+	var prioritized: String = ""
+	
+	while file_name != "":
+		if not dir.current_is_dir() and not file_name.ends_with(".import"):
+			var ext = file_name.get_extension().to_lower()
+			if ext in ["png", "jpg", "jpeg", "webp"]:
+				var base = file_name.get_basename().to_lower()
+				if base == "wall":
+					prioritized = dir_path + "/" + file_name
+					break
+				else:
+					candidates.append(dir_path + "/" + file_name)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+	
+	var chosen_path = prioritized if prioritized != "" else (candidates[0] if candidates.size() > 0 else "")
+	if chosen_path == "":
+		return null
+	
+	# 1. Попытка загрузки через ResourceLoader (если Godot уже импортировал файл)
+	if ResourceLoader.exists(chosen_path):
+		var res = load(chosen_path)
+		if res is Texture2D:
+			return res
+	
+	# 2. Прямая загрузка с диска через Image (если файл закинут прямо во время работы)
+	var abs_path = ProjectSettings.globalize_path(chosen_path)
+	var img = Image.new()
+	var err = img.load(abs_path)
+	if err == OK:
+		return ImageTexture.create_from_image(img)
+	
+	return null
 
 # ============================================================
 # ВЕРСТАК СБОРЩИКА
