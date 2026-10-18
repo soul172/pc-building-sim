@@ -102,21 +102,23 @@ func build_room() -> void:
 	make_box(Vector3(14, 0.1, 14), Vector3(0, 3.2, 0), Color(0.25, 0.25, 0.3))
 	
 	# Потолочные LED-панели и источники освещения
-	_create_ceiling_lamp(Vector3(0, 3.16, -1.0), Vector2(1.6, 0.6), 1.5, Color(0.96, 0.97, 1.0), true)
-	_create_ceiling_lamp(Vector3(0, 3.16, 3.2), Vector2(1.6, 0.6), 1.2, Color(0.93, 0.95, 1.0), false)
-	_create_ceiling_lamp(Vector3(-3.2, 3.16, -2.0), Vector2(1.2, 0.5), 1.0, Color(0.92, 0.95, 1.0), false)
+	_create_ceiling_lamp(Vector3(0, 3.12, -1.0), Vector2(1.6, 0.6), 1.5, Color(0.96, 0.97, 1.0), true)
+	_create_ceiling_lamp(Vector3(-3.2, 3.12, -2.0), Vector2(1.2, 0.5), 1.0, Color(0.92, 0.95, 1.0), false)
 
 func _create_ceiling_lamp(pos: Vector3, size: Vector2, energy: float, light_color: Color = Color(0.95, 0.97, 1.0), enable_shadow: bool = true) -> OmniLight3D:
 	if not main: return null
 	
-	# 1. Тонкий тёмный каркас корпуса светильника
-	make_box(Vector3(size.x + 0.08, 0.03, size.y + 0.08), pos + Vector3(0, 0.015, 0), Color(0.18, 0.20, 0.24))
+	# 1. Тонкий тёмный каркас корпуса светильника (отключаем тени, чтобы лампа не затеняла потолок за собой)
+	var frame = make_box(Vector3(size.x + 0.08, 0.03, size.y + 0.08), pos + Vector3(0, 0.015, 0), Color(0.18, 0.20, 0.24))
+	if frame:
+		frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	
-	# 2. Светящаяся панель-диффузор с эмиссионным материалом (Glow)
+	# 2. Светящаяся панель-диффузор с эмиссионным материалом (Glow, без отбрасывания теней)
 	var panel = MeshInstance3D.new()
 	var box = BoxMesh.new()
 	box.size = Vector3(size.x, 0.02, size.y)
 	panel.mesh = box
+	panel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat = StandardMaterial3D.new()
 	mat.albedo_color = light_color
 	mat.emission_enabled = true
@@ -135,7 +137,7 @@ func _create_ceiling_lamp(pos: Vector3, size: Vector2, energy: float, light_colo
 	light.shadow_enabled = enable_shadow
 	light.shadow_bias = 0.05
 	light.shadow_blur = 1.5
-	light.position = pos - Vector3(0, 0.1, 0)
+	light.position = pos - Vector3(0, 0.05, 0)
 	main.add_child(light)
 	return light
 
@@ -266,6 +268,7 @@ func _build_workbench_lamp() -> void:
 	var box = BoxMesh.new()
 	box.size = Vector3(1.44, 0.015, 0.10)
 	lens.mesh = box
+	lens.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var mat = StandardMaterial3D.new()
 	var warm_light_color = Color(1.0, 0.98, 0.92)
 	mat.albedo_color = warm_light_color
