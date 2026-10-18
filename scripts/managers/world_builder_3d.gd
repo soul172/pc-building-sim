@@ -13,7 +13,7 @@ extends Node
 
 var main: Node3D = null
 var shelf_origin: Node3D = null
-var room_lights: Array[OmniLight3D] = []
+var room_lights: Array[Light3D] = []
 var shadows_enabled: bool = true
 
 func setup(p_main: Node3D) -> void:
@@ -239,6 +239,7 @@ func _load_wall_texture() -> Texture2D:
 # ============================================================
 func build_workbench() -> void:
 	if not main: return
+	shadows_enabled = SettingsUI.is_shadows_enabled()
 	var table_body = StaticBody3D.new()
 	var table_col = CollisionShape3D.new()
 	var table_shape = BoxShape3D.new()
@@ -301,13 +302,15 @@ func _build_workbench_lamp() -> void:
 	spot.spot_range = 3.6
 	spot.spot_angle = 48.0
 	spot.spot_angle_attenuation = 1.05
-	spot.shadow_enabled = true
+	spot.set_meta("base_shadow_enabled", true)
+	spot.shadow_enabled = shadows_enabled
 	spot.shadow_bias = 0.03
 	spot.shadow_blur = 1.2
 	spot.position = Vector3(0, -0.03, 0)
 	# Наклон вперёд-вниз к корпусу и коврику верстака
 	spot.rotation_degrees = Vector3(-68, 0, 0)
 	lamp_root.add_child(spot)
+	room_lights.append(spot)
 
 	main.add_child(lamp_root)
 
