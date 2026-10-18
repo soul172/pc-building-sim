@@ -21,6 +21,7 @@ var max_rows_per_tier: int = 2
 
 # Список активных коробок на полке
 var active_boxes: Array[ComponentBox] = []
+var last_unpack_time: int = 0
 
 func setup(p_main: Node3D) -> void:
 	main = p_main
@@ -99,12 +100,18 @@ func try_interact_box() -> bool:
 	if not main:
 		return false
 
+	var current_time = Time.get_ticks_msec()
+	if current_time - last_unpack_time < 150:
+		return false
+
 	# 1. Проверка по прямому прицелу Raycast
 	if main.raycast and main.raycast.is_colliding():
 		var collider = main.raycast.get_collider()
 		var box = _find_box_in_hierarchy(collider)
-		if box and is_instance_valid(box) and not box.is_unpacking:
-			box.unpack()
+		if box and is_instance_valid(box):
+			if not box.is_unpacking:
+				last_unpack_time = current_time
+				box.unpack()
 			return true
 
 	# 2. Поиск по направлению взгляда камеры перед стеллажом (< 3.2 м)
@@ -126,6 +133,7 @@ func try_interact_box() -> bool:
 						best_box = b
 
 		if best_box:
+			last_unpack_time = current_time
 			best_box.unpack()
 			return true
 
@@ -142,4 +150,5 @@ func _find_box_in_hierarchy(node: Node) -> ComponentBox:
 
 ## Внутренний обработчик сигнала открытия коробки
 func _on_box_opened(item: PCItem, world_pos: Vector3) -> void:
+	active_boxes = active_boxes.filter(func(b): return is_instance_valid(b) and not b.is_unpacking and b.is_inside_tree())
 	box_unpacked.emit(item, world_pos)
