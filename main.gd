@@ -615,7 +615,7 @@ func interact() -> void:
 				show_error("Нельзя использовать отвёртку сквозь стенку корпуса! Подойдите с открытой стороны.")
 				play_error_sound()
 				return
-			elif motherboard_installed and parts_mgr and not parts_mgr.can_access_case_interior():
+			elif motherboard_installed and parts_mgr and not parts_mgr.can_access_case_interior(raycast.get_collision_point()):
 				show_error("Материнская плата не видна с этой стороны! Подойдите к открытой стороне корпуса.")
 				play_error_sound()
 				return
@@ -633,7 +633,7 @@ func interact() -> void:
 				show_error("Нельзя нанести термопасту сквозь стенку корпуса! Подойдите с открытой стороны.")
 				play_error_sound()
 				return
-			elif motherboard_installed and parts_mgr and not parts_mgr.can_access_case_interior():
+			elif motherboard_installed and parts_mgr and not parts_mgr.can_access_case_interior(raycast.get_collision_point()):
 				show_error("Процессор не виден с этой стороны! Подойдите к открытой стороне корпуса.")
 				play_error_sound()
 				return
@@ -644,6 +644,20 @@ func interact() -> void:
 		parts_mgr.try_install()
 	else:
 		if tools_mgr and tools_mgr.try_pickup_tool(): return
+
+		# Проверка прямого взгляда на закрытые стенки корпуса перед попыткой подбора / извлечения
+		if raycast and raycast.is_colliding():
+			var col = raycast.get_collider()
+			if col and (col.is_in_group("pc_case_body") or col.name == "PCCaseBody" or (pc_case and pc_case.is_ancestor_of(col) and col.name != "PowerButtonBody")):
+				if not case_lid_open:
+					show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
+					play_error_sound()
+					return
+				elif parts_mgr and not parts_mgr.can_access_case_interior(raycast.get_collision_point()):
+					show_error("Детали не видны с этой стороны! Подойдите к открытой стороне корпуса.")
+					play_error_sound()
+					return
+
 		if parts_mgr and parts_mgr.try_extract(): return
 		if parts_mgr: parts_mgr.try_pickup()
 
