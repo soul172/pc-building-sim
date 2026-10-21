@@ -15,6 +15,7 @@ var main: Node3D = null
 var shelf_origin: Node3D = null
 var room_lights: Array[Light3D] = []
 var shadows_enabled: bool = true
+var case_lid_col: CollisionShape3D = null
 
 func setup(p_main: Node3D) -> void:
 	main = p_main
@@ -407,6 +408,44 @@ func build_pc_case() -> void:
 	# Задняя панель
 	make_box_on(pc_case, Vector3(0.5, 0.47, 0.01), Vector3(0, 0.005, -0.245), Color(0.12, 0.12, 0.16))
 
+	# Физические коллизии глухих внешних панелей корпуса (защита от кликов сквозь стенки)
+	var case_body = StaticBody3D.new()
+	case_body.name = "PCCaseBody"
+	case_body.add_to_group("pc_case_body")
+	pc_case.add_child(case_body)
+
+	# Коллизия дна
+	var col_bottom = CollisionShape3D.new()
+	var shape_bottom = BoxShape3D.new()
+	shape_bottom.size = Vector3(0.5, 0.02, 0.5)
+	col_bottom.shape = shape_bottom
+	col_bottom.position = Vector3(0, -0.24, 0)
+	case_body.add_child(col_bottom)
+
+	# Коллизия левой стенки
+	var col_left = CollisionShape3D.new()
+	var shape_left = BoxShape3D.new()
+	shape_left.size = Vector3(0.02, 0.47, 0.48)
+	col_left.shape = shape_left
+	col_left.position = Vector3(-0.245, 0.005, 0)
+	case_body.add_child(col_left)
+
+	# Коллизия верха
+	var col_top = CollisionShape3D.new()
+	var shape_top = BoxShape3D.new()
+	shape_top.size = Vector3(0.5, 0.02, 0.5)
+	col_top.shape = shape_top
+	col_top.position = Vector3(0, 0.245, 0)
+	case_body.add_child(col_top)
+
+	# Коллизия передней панели
+	var col_front = CollisionShape3D.new()
+	var shape_front = BoxShape3D.new()
+	shape_front.size = Vector3(0.5, 0.47, 0.02)
+	col_front.shape = shape_front
+	col_front.position = Vector3(0, 0.005, 0.245)
+	case_body.add_child(col_front)
+
 	# Правая стенка (боковая крышка — прозрачное закалённое стекло)
 	var lid_mesh = MeshInstance3D.new()
 	lid_mesh.name = "CaseLid"
@@ -423,6 +462,21 @@ func build_pc_case() -> void:
 	lid_mesh.position = Vector3(0.245, 0.005, 0.0)
 	pc_case.add_child(lid_mesh)
 	main.case_lid = lid_mesh
+
+	# Физический коллайдер боковой крышки корпуса
+	var lid_body = StaticBody3D.new()
+	lid_body.name = "CaseLidBody"
+	lid_body.add_to_group("case_lid")
+	var lid_col = CollisionShape3D.new()
+	var lid_shape = BoxShape3D.new()
+	lid_shape.size = Vector3(0.015, 0.468, 0.478)
+	lid_col.shape = lid_shape
+	lid_body.add_child(lid_col)
+	lid_mesh.add_child(lid_body)
+	case_lid_col = lid_col
+	if main.case_lid_open:
+		case_lid_col.disabled = true
+
 	# Кнопка питания
 	main.power_button = make_box_on(pc_case, Vector3(0.04, 0.04, 0.016), Vector3(0.18, 0.17, -0.245), Color(0.1, 0.7, 0.3))
 	# Световой индикатор (синий)
@@ -518,6 +572,8 @@ func toggle_case_lid() -> void:
 	if not main: return
 	main.case_lid_open = not main.case_lid_open
 	if main.case_lid_open:
+		if case_lid_col and is_instance_valid(case_lid_col):
+			case_lid_col.disabled = true
 		var tween = main.create_tween()
 		tween.tween_property(main.case_lid, "position:x", 0.55, 0.3)
 		tween.tween_callback(func(): main.case_lid.visible = false)
@@ -527,6 +583,8 @@ func toggle_case_lid() -> void:
 			main.guided_mgr.recalculate_current_step()
 	else:
 		main.case_lid.visible = true
+		if case_lid_col and is_instance_valid(case_lid_col):
+			case_lid_col.disabled = false
 		var tween = main.create_tween()
 		tween.tween_property(main.case_lid, "position:x", 0.245, 0.3)
 		main.play_click_sound()
