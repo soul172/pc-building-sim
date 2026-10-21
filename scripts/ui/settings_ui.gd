@@ -25,6 +25,8 @@ var window_mode_option: OptionButton = null
 var vsync_checkbox: CheckButton = null
 var fps_option: OptionButton = null
 var shadows_checkbox: CheckButton = null
+var scale_slider: HSlider = null
+var scale_val_lbl: Label = null
 
 var sens_slider: HSlider = null
 var sens_val_lbl: Label = null
@@ -437,6 +439,38 @@ func _build_graphics_tab() -> void:
 	shadows_checkbox.add_theme_font_size_override("font_size", 13)
 	shadow_box.add_child(shadows_checkbox)
 
+	# 5. 3D Resolution Scale
+	var scale_box = HBoxContainer.new()
+	scale_box.add_theme_constant_override("separation", 14)
+	tab.add_child(scale_box)
+
+	var lbl_scale = Label.new()
+	lbl_scale.text = "Масштаб 3D-рендера:"
+	lbl_scale.custom_minimum_size = Vector2(230, 0)
+	lbl_scale.add_theme_font_size_override("font_size", 13)
+	scale_box.add_child(lbl_scale)
+
+	scale_slider = HSlider.new()
+	scale_slider.min_value = 50.0
+	scale_slider.max_value = 100.0
+	scale_slider.step = 5.0
+	scale_slider.value = 100.0
+	scale_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scale_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	scale_box.add_child(scale_slider)
+
+	scale_val_lbl = Label.new()
+	scale_val_lbl.text = "100%"
+	scale_val_lbl.custom_minimum_size = Vector2(50, 0)
+	scale_val_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	scale_val_lbl.add_theme_font_size_override("font_size", 13)
+	scale_box.add_child(scale_val_lbl)
+
+	scale_slider.value_changed.connect(func(val):
+		scale_val_lbl.text = "%d%%" % int(val)
+		get_viewport().scaling_3d_scale = val / 100.0
+	)
+
 # ============================================================
 # ВКЛАДКА «ИГРА» (GAMEPLAY)
 # ============================================================
@@ -550,6 +584,9 @@ func reset_to_defaults() -> void:
 		if idx != -1: fps_option.select(idx)
 	if shadows_checkbox:
 		shadows_checkbox.button_pressed = true
+	if scale_slider:
+		scale_slider.value = 100.0
+		scale_val_lbl.text = "100%"
 
 	if sens_slider:
 		sens_slider.value = 100.0
@@ -599,6 +636,7 @@ func save_settings() -> void:
 	if vsync_checkbox: cfg.set_value("graphics", "vsync", vsync_checkbox.button_pressed)
 	if fps_option: cfg.set_value("graphics", "fps_limit", fps_option.get_selected_id())
 	if shadows_checkbox: cfg.set_value("graphics", "shadows", shadows_checkbox.button_pressed)
+	if scale_slider: cfg.set_value("graphics", "scaling_3d_scale", scale_slider.value / 100.0)
 
 	if sens_slider: cfg.set_value("gameplay", "mouse_sensitivity_pct", sens_slider.value)
 	if invert_y_checkbox: cfg.set_value("gameplay", "invert_y", invert_y_checkbox.button_pressed)
@@ -620,6 +658,7 @@ func load_settings() -> void:
 	var vsync: bool = cfg.get_value("graphics", "vsync", true) if err == OK else true
 	var fps_lim: int = cfg.get_value("graphics", "fps_limit", 60) if err == OK else 60
 	var shadows_enabled: bool = cfg.get_value("graphics", "shadows", true) if err == OK else true
+	var res_scale: float = cfg.get_value("graphics", "scaling_3d_scale", 1.0) if err == OK else 1.0
 
 	var sens_pct: float = cfg.get_value("gameplay", "mouse_sensitivity_pct", 100.0) if err == OK else 100.0
 	var inv_y: bool = cfg.get_value("gameplay", "invert_y", false) if err == OK else false
@@ -643,6 +682,9 @@ func load_settings() -> void:
 		vsync_checkbox.button_pressed = vsync
 	if shadows_checkbox:
 		shadows_checkbox.button_pressed = shadows_enabled
+	if scale_slider:
+		scale_slider.value = res_scale * 100.0
+		scale_val_lbl.text = "%d%%" % int(scale_slider.value)
 	if fps_option:
 		var idx = fps_option.get_item_index(fps_lim)
 		if idx != -1: fps_option.select(idx)
@@ -693,6 +735,8 @@ func apply_settings() -> void:
 
 	var is_shadows: bool = shadows_checkbox.button_pressed if shadows_checkbox else true
 	apply_rendering_shadows(get_viewport(), is_shadows)
+	if scale_slider:
+		get_viewport().scaling_3d_scale = scale_slider.value / 100.0
 
 	settings_applied.emit({
 		"master_volume": master_slider.value / 100.0 if master_slider else 1.0,
@@ -703,6 +747,7 @@ func apply_settings() -> void:
 		"vsync": vsync_checkbox.button_pressed if vsync_checkbox else true,
 		"fps_limit": fps_option.get_selected_id() if fps_option else 60,
 		"shadows": is_shadows,
+		"scaling_3d_scale": scale_slider.value / 100.0 if scale_slider else 1.0,
 		"mouse_sensitivity": (sens_slider.value / 100.0) * 0.002 if sens_slider else 0.002,
 		"invert_y": invert_y_checkbox.button_pressed if invert_y_checkbox else false
 	})
@@ -756,6 +801,7 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 	var vsync: bool = cfg.get_value("graphics", "vsync", true) if err == OK else true
 	var fps_lim: int = cfg.get_value("graphics", "fps_limit", 60) if err == OK else 60
 	var shadows_enabled: bool = cfg.get_value("graphics", "shadows", true) if err == OK else true
+	var res_scale: float = cfg.get_value("graphics", "scaling_3d_scale", 1.0) if err == OK else 1.0
 
 	var sens_pct: float = cfg.get_value("gameplay", "mouse_sensitivity_pct", 100.0) if err == OK else 100.0
 	var inv_y: bool = cfg.get_value("gameplay", "invert_y", false) if err == OK else false
@@ -777,6 +823,7 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 	var main_loop = Engine.get_main_loop()
 	if main_loop is SceneTree and main_loop.root:
 		apply_rendering_shadows(main_loop.root, shadows_enabled)
+		main_loop.root.scaling_3d_scale = res_scale
 
 	if camera_ctrl and is_instance_valid(camera_ctrl):
 		camera_ctrl.mouse_sensitivity = (sens_pct / 100.0) * 0.002
@@ -784,6 +831,7 @@ static func load_and_apply_saved_settings(camera_ctrl: CameraController = null) 
 
 	return {
 		"shadows": shadows_enabled,
+		"scaling_3d_scale": res_scale,
 		"window_mode": win_mode,
 		"vsync": vsync,
 		"fps_limit": fps_lim
