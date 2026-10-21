@@ -220,10 +220,18 @@ func _ready() -> void:
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	DisplayServer.window_set_title("PC Building Sim — Симулятор сборки ПК")
 
+	# Ограничение разрешения карт теней для плавной работы на слабых GPU (встройка Intel UHD 630)
+	get_viewport().positional_shadow_atlas_size = 512
+	get_viewport().positional_shadow_atlas_16_bits = true
+	RenderingServer.directional_shadow_atlas_set_size(512, true)
+
 	_init_managers()
 	var applied_settings = SettingsUI.load_and_apply_saved_settings(camera_ctrl)
-	if applied_settings.has("shadows") and world_builder:
-		world_builder.set_shadows_enabled(applied_settings["shadows"])
+	var shadows_on: bool = applied_settings.get("shadows", true)
+	if world_builder:
+		world_builder.set_shadows_enabled(shadows_on)
+	get_viewport().positional_shadow_atlas_size = 512 if shadows_on else 0
+	RenderingServer.directional_shadow_atlas_set_size(512 if shadows_on else 0, true)
 	build_main_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -837,8 +845,12 @@ func open_settings() -> void:
 	settings_ui.open(camera_ctrl)
 
 func _on_settings_applied(settings_data: Dictionary) -> void:
-	if settings_data.has("shadows") and world_builder:
-		world_builder.set_shadows_enabled(settings_data["shadows"])
+	if settings_data.has("shadows"):
+		var is_sh: bool = settings_data["shadows"]
+		if world_builder:
+			world_builder.set_shadows_enabled(is_sh)
+		get_viewport().positional_shadow_atlas_size = 512 if is_sh else 0
+		RenderingServer.directional_shadow_atlas_set_size(512 if is_sh else 0, true)
 
 func close_settings() -> void:
 	if settings_ui and is_instance_valid(settings_ui):
