@@ -604,19 +604,37 @@ func interact() -> void:
 	if world_builder and world_builder.try_interact_monitor(): return
 
 	if tool_held == "screwdriver":
-		if not case_lid_open and raycast and raycast.is_colliding():
+		if raycast and raycast.is_colliding():
 			var col = raycast.get_collider()
-			if col and (col.is_in_group("case_lid") or col.is_in_group("pc_case_body") or col.name in ["CaseLidBody", "PCCaseBody"]):
-				show_error("Откройте боковую крышку корпуса (F) перед использованием отвёртки!")
+			if col and (col.is_in_group("case_lid") or col.name == "CaseLidBody"):
+				if not case_lid_open:
+					show_error("Откройте боковую крышку корпуса (F) перед использованием отвёртки!")
+					play_error_sound()
+					return
+			elif col and (col.is_in_group("pc_case_body") or col.name == "PCCaseBody"):
+				show_error("Нельзя использовать отвёртку сквозь стенку корпуса! Подойдите с открытой стороны.")
+				play_error_sound()
+				return
+			elif motherboard_installed and parts_mgr and not parts_mgr.can_access_case_interior():
+				show_error("Материнская плата не видна с этой стороны! Подойдите к открытой стороне корпуса.")
 				play_error_sound()
 				return
 		tools_mgr.try_use_screwdriver()
 		return
 	if tool_held == "thermal_paste":
-		if not case_lid_open and motherboard_installed and raycast and raycast.is_colliding():
+		if raycast and raycast.is_colliding():
 			var col = raycast.get_collider()
-			if col and (col.is_in_group("case_lid") or col.is_in_group("pc_case_body") or col.name in ["CaseLidBody", "PCCaseBody"]):
-				show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к процессору!")
+			if col and (col.is_in_group("case_lid") or col.name == "CaseLidBody"):
+				if not case_lid_open:
+					show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к процессору!")
+					play_error_sound()
+					return
+			elif col and (col.is_in_group("pc_case_body") or col.name == "PCCaseBody"):
+				show_error("Нельзя нанести термопасту сквозь стенку корпуса! Подойдите с открытой стороны.")
+				play_error_sound()
+				return
+			elif motherboard_installed and parts_mgr and not parts_mgr.can_access_case_interior():
+				show_error("Процессор не виден с этой стороны! Подойдите к открытой стороне корпуса.")
 				play_error_sound()
 				return
 		tools_mgr.try_apply_thermal_paste()
