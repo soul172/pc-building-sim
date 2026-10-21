@@ -82,6 +82,10 @@ func try_pickup() -> bool:
 	var hit_pos = main.raycast.get_collision_point()
 	var best_part = null
 
+	# Если луч упирается в глухую стенку корпуса или закрытую крышку — запрещаем сквозной подбор
+	if collider and (collider.is_in_group("pc_case_body") or collider.is_in_group("case_lid") or collider.name in ["PCCaseBody", "CaseLidBody"]):
+		return false
+
 	# Если материнская плата еще на столе и смотрим на неё или на её детали — берём плату целиком
 	if not main.motherboard_installed and (collider == main.motherboard_node or (main.motherboard_node and main.motherboard_node.is_ancestor_of(collider))):
 		best_part = main.motherboard_node
@@ -262,6 +266,22 @@ func try_install() -> void:
 	var hit_pos = main.raycast.get_collision_point()
 	var collider = main.raycast.get_collider()
 	var part_type = main.held_part.get_meta("type")
+
+	# Защита от монтажа сквозь закрытую крышку или глухие стенки корпуса
+	if collider:
+		if collider.is_in_group("case_lid") or collider.name == "CaseLidBody":
+			if not main.case_lid_open:
+				main.show_error("Откройте боковую крышку корпуса (F)!")
+				animate_error_shake(main.held_part)
+				main.add_mistake()
+				return
+		elif collider.is_in_group("pc_case_body") or collider.name == "PCCaseBody":
+			if part_type != "motherboard":
+				main.show_error("Нельзя установить деталь сквозь стенку корпуса! Откройте крышку (F) и монтируйте с открытой стороны.")
+				animate_error_shake(main.held_part)
+				main.add_mistake()
+				return
+
 	var best_slot_id = null
 	var best_dist = 999.0
 
@@ -327,12 +347,12 @@ func install_part(slot_id: String) -> void:
 		main.show_error("Слот уже занят!")
 		return
 
-	if slot_id == "mb_slot":
-		if not main.case_lid_open:
-			animate_error_shake(part)
-			main.show_error("Сначала откройте боковую крышку корпуса (F)!")
-			main.add_mistake()
-			return
+	var is_case_slot = (slot_id in ["mb_slot", "psu"]) or (main.motherboard_installed and slot_id != "case_fan")
+	if is_case_slot and not main.case_lid_open:
+		animate_error_shake(part)
+		main.show_error("Сначала откройте боковую крышку корпуса (F)!")
+		main.add_mistake()
+		return
 
 	set_part_colliders_enabled(part, true)
 	slot["occupied"] = true
@@ -420,7 +440,18 @@ func try_extract() -> bool:
 		if collider and (collider == main.motherboard_node or (main.motherboard_node and main.motherboard_node.is_ancestor_of(collider))):
 			return false
 
-	# 1. Прямой поиск детали по коллайдеру
+	# 1. Проверка попадания в боковую крышку корпуса
+	if collider and (collider.is_in_group("case_lid") or collider.name == "CaseLidBody" or (main.case_lid and (collider == main.case_lid or main.case_lid.is_ancestor_of(collider)))):
+		if not main.case_lid_open:
+			main.show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
+			main.play_error_sound()
+			return true
+		return false
+
+	# 2. Проверка попадания в глухие стенки корпуса (запрет сквозного извлечения)
+	var is_case_wall = collider and (collider.is_in_group("pc_case_body") or collider.name == "PCCaseBody")
+
+	# 3. Прямой поиск детали по коллайдеру
 	var part = find_part_node(collider)
 	var target_slot_id = ""
 	if part:
@@ -428,8 +459,8 @@ func try_extract() -> bool:
 		if target_slot_id == "":
 			return false
 
-	# 2. Поиск по близости к слоту
-	if target_slot_id == "":
+	# 4. Поиск по близости к слоту (только если луч НЕ упёрся в глухую стенку корпуса)
+	if target_slot_id == "" and not is_case_wall:
 		var best_dist = 999.0
 		for sid in main.slots:
 			var slot = main.slots[sid]
@@ -446,13 +477,14 @@ func try_extract() -> bool:
 	if target_slot_id == "":
 		return false
 
-	# 3. Проверка боковой крышки
-	if main.motherboard_installed and not main.case_lid_open and target_slot_id != "case_fan":
+	# 5. Проверка боковой крышки для всех внутренних компонентов ПК
+	var is_inside_case = (target_slot_id in ["psu", "mb_slot"]) or (main.motherboard_installed and target_slot_id != "case_fan")
+	if is_inside_case and not main.case_lid_open:
 		main.show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
 		main.play_error_sound()
 		return true
 
-	# 4. Проверка зависимостей:
+	# 6. Проверка зависимостей:
 	if target_slot_id == "cpu" and main.slots["cooler"]["occupied"]:
 		main.show_error("Сначала снимите кулер процессора — он закрывает сокет CPU!")
 		main.play_error_sound()
