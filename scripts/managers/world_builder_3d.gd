@@ -419,41 +419,41 @@ func build_pc_case() -> void:
 	# Коллизия дна
 	var col_bottom = CollisionShape3D.new()
 	var shape_bottom = BoxShape3D.new()
-	shape_bottom.size = Vector3(0.52, 0.03, 0.52)
+	shape_bottom.size = Vector3(0.54, 0.05, 0.54)
 	col_bottom.shape = shape_bottom
-	col_bottom.position = Vector3(0, -0.24, 0)
+	col_bottom.position = Vector3(0, -0.25, 0)
 	case_body.add_child(col_bottom)
 
-	# Коллизия левой стенки (глухая)
+	# Коллизия левой стенки (глухая панель за материнской платой)
 	var col_left = CollisionShape3D.new()
 	var shape_left = BoxShape3D.new()
-	shape_left.size = Vector3(0.03, 0.49, 0.52)
+	shape_left.size = Vector3(0.06, 0.50, 0.54)
 	col_left.shape = shape_left
-	col_left.position = Vector3(-0.245, 0.005, 0)
+	col_left.position = Vector3(-0.26, 0.005, 0)
 	case_body.add_child(col_left)
 
 	# Коллизия верха
 	var col_top = CollisionShape3D.new()
 	var shape_top = BoxShape3D.new()
-	shape_top.size = Vector3(0.52, 0.03, 0.52)
+	shape_top.size = Vector3(0.54, 0.05, 0.54)
 	col_top.shape = shape_top
-	col_top.position = Vector3(0, 0.245, 0)
+	col_top.position = Vector3(0, 0.26, 0)
 	case_body.add_child(col_top)
 
 	# Коллизия передней панели
 	var col_front = CollisionShape3D.new()
 	var shape_front = BoxShape3D.new()
-	shape_front.size = Vector3(0.52, 0.49, 0.03)
+	shape_front.size = Vector3(0.54, 0.50, 0.06)
 	col_front.shape = shape_front
-	col_front.position = Vector3(0, 0.005, 0.245)
+	col_front.position = Vector3(0, 0.005, 0.26)
 	case_body.add_child(col_front)
 
 	# Коллизия задней панели (закрывает сквозной доступ сзади/сбоку)
 	var col_back = CollisionShape3D.new()
 	var shape_back = BoxShape3D.new()
-	shape_back.size = Vector3(0.52, 0.49, 0.03)
+	shape_back.size = Vector3(0.54, 0.50, 0.06)
 	col_back.shape = shape_back
-	col_back.position = Vector3(0, 0.005, -0.245)
+	col_back.position = Vector3(0, 0.005, -0.26)
 	case_body.add_child(col_back)
 
 	# Правая стенка (боковая крышка — прозрачное закалённое стекло)
@@ -620,7 +620,7 @@ func build_motherboard() -> void:
 	mb_body.name = "MBBody"
 	var mb_col = CollisionShape3D.new()
 	var mb_shape = BoxShape3D.new()
-	mb_shape.size = Vector3(0.37, 0.025, 0.37)
+	mb_shape.size = Vector3(0.35, 0.02, 0.35)
 	mb_col.shape = mb_shape
 	mb_body.add_child(mb_col)
 	mb_body.collision_layer = 2
@@ -666,7 +666,7 @@ func create_slot_on(id: String, pos: Vector3, size: Vector3, type: String, paren
 	static_body.name = "SlotBody"
 	var col = CollisionShape3D.new()
 	var shape = BoxShape3D.new()
-	shape.size = size * 3
+	shape.size = Vector3(size.x + 0.015, max(size.y * 1.5, 0.02), size.z + 0.015)
 	col.shape = shape
 	static_body.add_child(col)
 	static_body.collision_layer = 2
@@ -689,7 +689,7 @@ func create_slot(id: String, pos: Vector3, size: Vector3, type: String) -> void:
 	static_body.name = "SlotBody"
 	var col = CollisionShape3D.new()
 	var shape = BoxShape3D.new()
-	shape.size = size * 2
+	shape.size = Vector3(size.x + 0.015, max(size.y * 1.5, 0.02), size.z + 0.015)
 	col.shape = shape
 	static_body.add_child(col)
 	slot_area.add_child(static_body)
@@ -727,10 +727,12 @@ func create_part(id: String, part_name: String, size: Vector3, pos: Vector3, col
 	part.add_to_group("parts")
 	var col = CollisionShape3D.new()
 	col.shape = BoxShape3D.new()
-	if type == "ram" or type == "ssd":
-		col.shape.size = size * 5
+	if type in ["ram", "ssd"]:
+		col.shape.size = Vector3(max(size.x * 1.5, 0.025), max(size.y * 2.0, 0.025), max(size.z * 1.3, 0.025))
+	elif type == "gpu":
+		col.shape.size = Vector3(size.x * 1.02, max(size.y * 1.5, 0.025), size.z * 1.2)
 	else:
-		col.shape.size = size * 2
+		col.shape.size = Vector3(size.x * 1.15, max(size.y * 1.3, 0.025), size.z * 1.15)
 	var static_body = StaticBody3D.new()
 	static_body.add_child(col)
 	static_body.collision_layer = 2
