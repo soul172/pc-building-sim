@@ -604,9 +604,21 @@ func interact() -> void:
 	if world_builder and world_builder.try_interact_monitor(): return
 
 	if tool_held == "screwdriver":
+		if not case_lid_open and raycast and raycast.is_colliding():
+			var col = raycast.get_collider()
+			if col and (col.is_in_group("case_lid") or col.is_in_group("pc_case_body") or col.name in ["CaseLidBody", "PCCaseBody"]):
+				show_error("Откройте боковую крышку корпуса (F) перед использованием отвёртки!")
+				play_error_sound()
+				return
 		tools_mgr.try_use_screwdriver()
 		return
 	if tool_held == "thermal_paste":
+		if not case_lid_open and motherboard_installed and raycast and raycast.is_colliding():
+			var col = raycast.get_collider()
+			if col and (col.is_in_group("case_lid") or col.is_in_group("pc_case_body") or col.name in ["CaseLidBody", "PCCaseBody"]):
+				show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к процессору!")
+				play_error_sound()
+				return
 		tools_mgr.try_apply_thermal_paste()
 		return
 
@@ -698,6 +710,9 @@ func _on_wiring_completed() -> void:
 
 func build_psu_rear_controls() -> void:
 	if power_mgr: power_mgr.build_psu_rear_controls()
+
+func toggle_case_lid() -> void:
+	if world_builder: world_builder.toggle_case_lid()
 
 # Монитор и экран
 func set_monitor_screen_off() -> void:
