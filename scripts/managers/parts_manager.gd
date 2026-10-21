@@ -73,23 +73,63 @@ func get_slot_for_part(part: Node3D) -> String:
 			return sid
 	return ""
 
-func can_access_case_interior() -> bool:
+func can_access_case_interior(target_world_pos: Vector3 = Vector3.ZERO) -> bool:
 	if not main or not main.pc_case or not main.camera:
 		return false
 	if not main.case_lid_open:
 		return false
+
 	# В локальных координатах pc_case:
-	# +X — это открытая сторона с боковой крышкой (стеклом, x = 0.245).
+	# +X — открытая сторона с боковой крышкой (проём x = 0.245, Y in [-0.24, 0.24], Z in [-0.24, 0.24]).
 	# -X — глухая стенка за материнской платой (x = -0.245).
+	# +Z — передняя панель (z = 0.245).
+	# -Z — задняя панель (z = -0.245).
 	var cam_local = main.pc_case.to_local(main.camera.global_position)
-	if cam_local.x < 0.10:
+
+	# 1. Камера должна находиться с открытой стороны (+X):
+	# Нельзя быть сзади глухой стенки (x < 0.18) или слишком далеко за пределами корпуса по Z
+	if cam_local.x < 0.18:
 		return false
 
-	# Проверяем вектор направления луча взгляда камеры внутрь проёма корпуса (+X -> -X)
+	# Если игрок стоит сбоку передней (z > 0.55) или задней (z < -0.55) панели корпуса
+	if abs(cam_local.z) > 0.55:
+		return false
+
+	# 2. Вектор взгляда камеры должен быть явно направлен внутрь открытого проёма (+X -> -X)
 	var open_normal = main.pc_case.global_transform.basis.x.normalized()
 	var ray_dir = -main.camera.global_transform.basis.z.normalized()
-	if ray_dir.dot(open_normal) > -0.05:
+	if ray_dir.dot(open_normal) > -0.15:
 		return false
+
+	# 3. Проверка прохождения линии взгляда через плоскость открытого проёма (X = 0.245)
+	var dest_world = target_world_pos
+	if dest_world == Vector3.ZERO and main.raycast and main.raycast.is_colliding():
+		dest_world = main.raycast.get_collision_point()
+
+	var plane_x = 0.245
+	if dest_world != Vector3.ZERO:
+		var dest_local = main.pc_case.to_local(dest_world)
+		if cam_local.x > plane_x:
+			var dx = dest_local.x - cam_local.x
+			if abs(dx) > 0.001:
+				var t = (plane_x - cam_local.x) / dx
+				if t >= 0.0 and t <= 1.05:
+					var cross_y = cam_local.y + t * (dest_local.y - cam_local.y)
+					var cross_z = cam_local.z + t * (dest_local.z - cam_local.z)
+					# Окно проёма корпуса с небольшим допуском
+					if cross_y < -0.25 or cross_y > 0.25 or cross_z < -0.25 or cross_z > 0.25:
+						return false
+	else:
+		# Если точной точки нет, проверяем траекторию луча камеры на пересечение с плоскостью проёма
+		var ray_dest_local = main.pc_case.to_local(main.camera.global_position + ray_dir * 3.0)
+		var dx = ray_dest_local.x - cam_local.x
+		if abs(dx) > 0.001 and cam_local.x > plane_x:
+			var t = (plane_x - cam_local.x) / dx
+			if t > 0.0:
+				var cross_y = cam_local.y + t * (ray_dest_local.y - cam_local.y)
+				var cross_z = cam_local.z + t * (ray_dest_local.z - cam_local.z)
+				if cross_y < -0.25 or cross_y > 0.25 or cross_z < -0.25 or cross_z > 0.25:
+					return false
 
 	return true
 
@@ -141,7 +181,7 @@ func try_pickup() -> bool:
 	if best_part:
 		# Если деталь находится внутри корпуса — запрещаем подбор без прямого доступа через открытую крышку
 		if main.pc_case and (best_part.get_parent() == main.pc_case or (main.motherboard_node and best_part.get_parent() == main.motherboard_node and main.motherboard_installed)):
-			if not can_access_case_interior():
+			if not can_access_case_interior(best_part.global_position):
 				return false
 
 		# Проверка пошагового режима
@@ -474,7 +514,7 @@ func try_extract() -> bool:
 		return false
 
 	# 2. Проверка попадания в глухие стенки корпуса (запрет сквозного извлечения)
-	var is_case_wall = collider and (collider.is_in_group("pc_case_body") or collider.name == "PCCaseBody")
+	var is_case_wall = collider and (collider.is_in_group("pc_case_body") or collider.name == "PCCaseBody" or collider.name.begins_with("CaseWall") or (main.pc_case and collider != main.case_lid and main.pc_case.is_ancestor_of(collider) and not collider.is_in_group("parts") and collider.name != "SlotBody" and collider.name != "PowerButtonBody"))
 	if is_case_wall:
 		if not main.case_lid_open:
 			main.show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
@@ -499,10 +539,12 @@ func try_extract() -> bool:
 			if not slot["occupied"] or not slot.has("part_id"): continue
 			if not main.motherboard_installed and slot.get("parent") == main.motherboard_node:
 				continue
-			var is_slot_in_case = (sid in ["psu", "mb_slot"]) or (main.motherboard_installed and sid != "case_fan")
-			if is_slot_in_case and not can_access_case_interior():
-				continue
+			var is_slot_in_case = (sid in ["psu", "mb_slot", "case_fan"]) or (main.motherboard_installed and sid != "")
 			var p_node = main.parts.get(slot["part_id"], null)
+			if is_slot_in_case:
+				var part_pos = p_node.global_position if (p_node and is_instance_valid(p_node)) else hit_pos
+				if not can_access_case_interior(part_pos):
+					continue
 			if p_node and is_instance_valid(p_node):
 				var d = hit_pos.distance_to(p_node.global_position)
 				if d < best_dist and d < 0.35:
@@ -513,13 +555,18 @@ func try_extract() -> bool:
 		return false
 
 	# 5. Проверка доступа для всех внутренних компонентов ПК
-	var is_inside_case = (target_slot_id in ["psu", "mb_slot"]) or (main.motherboard_installed and target_slot_id != "case_fan")
+	var is_inside_case = (target_slot_id in ["psu", "mb_slot", "case_fan"]) or (main.motherboard_installed and target_slot_id != "")
 	if is_inside_case:
 		if not main.case_lid_open:
 			main.show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
 			main.play_error_sound()
 			return true
-		if not can_access_case_interior():
+		var target_pos = hit_pos
+		if main.slots.has(target_slot_id) and main.slots[target_slot_id].has("part_id"):
+			var p_target = main.parts.get(main.slots[target_slot_id]["part_id"], null)
+			if p_target and is_instance_valid(p_target):
+				target_pos = p_target.global_position
+		if not can_access_case_interior(target_pos):
 			main.show_error("Детали не видны с этой стороны! Подойдите к открытой стороне корпуса.")
 			main.play_error_sound()
 			return true
