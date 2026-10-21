@@ -28,8 +28,27 @@ var pitch_max: float = 1.2
 var move_speed: float = 3.2
 var friction: float = 15.0
 
+var _camera_optimized: bool = false
+
 func setup(p_main: Node3D) -> void:
 	main = p_main
+	apply_camera_optimizations()
+
+## Оптимизация параметров сглаживания и дальности отрисовки для слабых GPU (Intel UHD 630):
+## 1. Отключение тяжелого MSAA 3D (устраняет перегрузку шины памяти)
+## 2. Отключение TAA (избавляет от размытия и тяжелых шейдеров)
+## 3. Включение сверхлегкого FXAA (быстрый пост-процесс)
+## 4. Ограничение дальности отсечения камеры (far = 30м вместо 4000м)
+func apply_camera_optimizations() -> void:
+	if not main: return
+	var vp = main.get_viewport()
+	if vp:
+		vp.msaa_3d = Viewport.MSAA_DISABLED
+		vp.use_taa = false
+		vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_FXAA
+	if main.camera and is_instance_valid(main.camera):
+		main.camera.far = 30.0
+		_camera_optimized = true
 
 func handle_mouse_motion(relative: Vector2) -> void:
 	if not main or not main.player or not main.camera: return
@@ -75,11 +94,14 @@ func reset_camera() -> void:
 	target_fov = 75.0
 	current_fov = 75.0
 	monitor_camera_focused = false
+	apply_camera_optimizations()
 	if main and main.camera:
 		main.camera.fov = 75.0
 
 func process_camera_zoom(delta: float) -> void:
 	if not main or not main.camera: return
+	if not _camera_optimized:
+		apply_camera_optimizations()
 	current_fov = lerp(current_fov, target_fov, zoom_speed)
 	main.camera.fov = current_fov
 
