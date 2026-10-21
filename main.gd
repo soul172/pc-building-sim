@@ -25,6 +25,7 @@ var victory_ui: VictoryUI = null
 var glossary_ui: GlossaryUI = null
 var configurator_panel: ConfiguratorUI = null
 var settings_ui: SettingsUI = null
+var backrooms_mgr: BackroomsManager = null
 var settings_canvas: CanvasLayer = null
 var settings_open: bool:
 	get:
@@ -302,6 +303,11 @@ func _init_managers() -> void:
 	add_child(delivery_mgr)
 	delivery_mgr.box_unpacked.connect(_on_box_unpacked)
 
+	backrooms_mgr = BackroomsManager.new()
+	backrooms_mgr.name = "BackroomsManager"
+	backrooms_mgr.setup(self)
+	add_child(backrooms_mgr)
+
 	# Синхронизация состояния пошагового режима при внешних событиях
 	wiring_mgr.wiring_completed.connect(_on_wiring_completed)
 	wiring_mgr.cable_disconnected.connect(func(_id): if guided_mgr: guided_mgr.recalculate_current_step())
@@ -324,6 +330,7 @@ func _process(delta: float) -> void:
 	if boot_mgr: boot_mgr.animate_fans(delta)
 	if hud_mgr: hud_mgr.process_hud(delta)
 	if not glossary_open and tips_mgr: tips_mgr.process_tips(delta)
+	if backrooms_mgr: backrooms_mgr.process_loop(delta)
 
 # ============================================================
 # ГЛАВНОЕ МЕНЮ И ЗАПУСК РЕЖИМОВ
@@ -499,6 +506,8 @@ func _build_world_and_ui() -> void:
 	tips_mgr.build_tip_panel()
 	build_glossary_panel()
 	audio_mgr.init_pc_fan_sound()
+	# Пасхалка: невидимая щель у задней стены (Z ~ -6.85)
+	if backrooms_mgr: backrooms_mgr.spawn_crack()
 
 # ============================================================
 # ОБРАБОТКА ВВОДА (INPUT)
@@ -586,7 +595,9 @@ func _input(event: InputEvent) -> void:
 					return
 			KEY_Z: if camera_ctrl: camera_ctrl.toggle_monitor_zoom()
 			KEY_ESCAPE:
-				if in_wiring_mode: wiring_mgr.exit_wiring_mode()
+				if backrooms_mgr and backrooms_mgr.is_in_backrooms():
+					backrooms_mgr.exit_backrooms()
+				elif in_wiring_mode: wiring_mgr.exit_wiring_mode()
 				elif settings_open: close_settings()
 				elif camera_ctrl: camera_ctrl.toggle_mouse_mode()
 
