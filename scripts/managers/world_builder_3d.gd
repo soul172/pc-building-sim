@@ -820,7 +820,7 @@ func build_monitor() -> void:
 	var monitor_viewport = SubViewport.new()
 	monitor_viewport.name = "MonitorSubViewport"
 	monitor_viewport.size = Vector2i(960, 640)
-	monitor_viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	monitor_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	monitor_viewport.transparent_bg = false
 	main.add_child(monitor_viewport)
 	main.monitor_viewport = monitor_viewport
@@ -847,12 +847,16 @@ func set_monitor_screen_off() -> void:
 	if not main: return
 	if main.windows_sim:
 		main.windows_sim.power_off()
+	if main.monitor_viewport:
+		main.monitor_viewport.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	if main.monitor_screen:
 		var mat = main.monitor_screen.get_surface_override_material(0)
 		if mat: mat.albedo_color = Color(0.1, 0.1, 0.1)
 
 func set_monitor_screen_no_signal() -> void:
 	if not main: return
+	if main.monitor_viewport:
+		main.monitor_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	if main.windows_sim:
 		main.windows_sim.show_no_signal()
 	if main.monitor_screen:
@@ -861,6 +865,8 @@ func set_monitor_screen_no_signal() -> void:
 
 func set_monitor_screen_bios(lines: Array, alert_type: String = "") -> void:
 	if not main: return
+	if main.monitor_viewport:
+		main.monitor_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	if main.windows_sim:
 		main.windows_sim.show_bios(lines, alert_type)
 	if main.monitor_screen:
@@ -869,6 +875,8 @@ func set_monitor_screen_bios(lines: Array, alert_type: String = "") -> void:
 
 func set_monitor_screen_desktop() -> void:
 	if not main: return
+	if main.monitor_viewport:
+		main.monitor_viewport.render_target_update_mode = SubViewport.UPDATE_WHEN_VISIBLE
 	if main.windows_sim:
 		main.windows_sim.show_desktop()
 	if main.monitor_screen:
