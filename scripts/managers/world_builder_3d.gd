@@ -412,20 +412,22 @@ func build_pc_case() -> void:
 	var case_body = StaticBody3D.new()
 	case_body.name = "PCCaseBody"
 	case_body.add_to_group("pc_case_body")
+	case_body.collision_layer = 3  # Слои 1 и 2 для надёжного перехвата луча RayCast
+	case_body.collision_mask = 0
 	pc_case.add_child(case_body)
 
 	# Коллизия дна
 	var col_bottom = CollisionShape3D.new()
 	var shape_bottom = BoxShape3D.new()
-	shape_bottom.size = Vector3(0.5, 0.02, 0.5)
+	shape_bottom.size = Vector3(0.52, 0.03, 0.52)
 	col_bottom.shape = shape_bottom
 	col_bottom.position = Vector3(0, -0.24, 0)
 	case_body.add_child(col_bottom)
 
-	# Коллизия левой стенки
+	# Коллизия левой стенки (глухая)
 	var col_left = CollisionShape3D.new()
 	var shape_left = BoxShape3D.new()
-	shape_left.size = Vector3(0.02, 0.47, 0.48)
+	shape_left.size = Vector3(0.03, 0.49, 0.52)
 	col_left.shape = shape_left
 	col_left.position = Vector3(-0.245, 0.005, 0)
 	case_body.add_child(col_left)
@@ -433,7 +435,7 @@ func build_pc_case() -> void:
 	# Коллизия верха
 	var col_top = CollisionShape3D.new()
 	var shape_top = BoxShape3D.new()
-	shape_top.size = Vector3(0.5, 0.02, 0.5)
+	shape_top.size = Vector3(0.52, 0.03, 0.52)
 	col_top.shape = shape_top
 	col_top.position = Vector3(0, 0.245, 0)
 	case_body.add_child(col_top)
@@ -441,10 +443,18 @@ func build_pc_case() -> void:
 	# Коллизия передней панели
 	var col_front = CollisionShape3D.new()
 	var shape_front = BoxShape3D.new()
-	shape_front.size = Vector3(0.5, 0.47, 0.02)
+	shape_front.size = Vector3(0.52, 0.49, 0.03)
 	col_front.shape = shape_front
 	col_front.position = Vector3(0, 0.005, 0.245)
 	case_body.add_child(col_front)
+
+	# Коллизия задней панели (закрывает сквозной доступ сзади/сбоку)
+	var col_back = CollisionShape3D.new()
+	var shape_back = BoxShape3D.new()
+	shape_back.size = Vector3(0.52, 0.49, 0.03)
+	col_back.shape = shape_back
+	col_back.position = Vector3(0, 0.005, -0.245)
+	case_body.add_child(col_back)
 
 	# Правая стенка (боковая крышка — прозрачное закалённое стекло)
 	var lid_mesh = MeshInstance3D.new()
@@ -467,9 +477,11 @@ func build_pc_case() -> void:
 	var lid_body = StaticBody3D.new()
 	lid_body.name = "CaseLidBody"
 	lid_body.add_to_group("case_lid")
+	lid_body.collision_layer = 3  # Слои 1 и 2
+	lid_body.collision_mask = 0
 	var lid_col = CollisionShape3D.new()
 	var lid_shape = BoxShape3D.new()
-	lid_shape.size = Vector3(0.015, 0.468, 0.478)
+	lid_shape.size = Vector3(0.02, 0.48, 0.50)
 	lid_col.shape = lid_shape
 	lid_body.add_child(lid_col)
 	lid_mesh.add_child(lid_body)
