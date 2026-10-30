@@ -618,9 +618,11 @@ func build_motherboard() -> void:
 	var _mb_mesh = make_box_on(motherboard_node, Vector3(0.35, 0.012, 0.35), Vector3.ZERO, main.selected_config["mb"]["color"])
 	var mb_body = StaticBody3D.new()
 	mb_body.name = "MBBody"
+	mb_body.add_to_group("parts")
+	mb_body.set_meta("part_node", motherboard_node)
 	var mb_col = CollisionShape3D.new()
 	var mb_shape = BoxShape3D.new()
-	mb_shape.size = Vector3(0.35, 0.02, 0.35)
+	mb_shape.size = Vector3(0.35, 0.015, 0.35)
 	mb_col.shape = mb_shape
 	mb_body.add_child(mb_col)
 	mb_body.collision_layer = 2
@@ -664,6 +666,8 @@ func create_slot_on(id: String, pos: Vector3, size: Vector3, type: String, paren
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var static_body = StaticBody3D.new()
 	static_body.name = "SlotBody"
+	static_body.add_to_group("slots")
+	static_body.set_meta("slot_id", id)
 	var col = CollisionShape3D.new()
 	var shape = BoxShape3D.new()
 	shape.size = Vector3(size.x + 0.015, max(size.y * 1.5, 0.02), size.z + 0.015)
@@ -687,6 +691,8 @@ func create_slot(id: String, pos: Vector3, size: Vector3, type: String) -> void:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var static_body = StaticBody3D.new()
 	static_body.name = "SlotBody"
+	static_body.add_to_group("slots")
+	static_body.set_meta("slot_id", id)
 	var col = CollisionShape3D.new()
 	var shape = BoxShape3D.new()
 	shape.size = Vector3(size.x + 0.015, max(size.y * 1.5, 0.02), size.z + 0.015)
@@ -734,6 +740,9 @@ func create_part(id: String, part_name: String, size: Vector3, pos: Vector3, col
 	else:
 		col.shape.size = Vector3(size.x * 1.15, max(size.y * 1.3, 0.025), size.z * 1.15)
 	var static_body = StaticBody3D.new()
+	static_body.name = "PartBody"
+	static_body.add_to_group("parts")
+	static_body.set_meta("part_node", part)
 	static_body.add_child(col)
 	static_body.collision_layer = 2
 	static_body.collision_mask = 0
