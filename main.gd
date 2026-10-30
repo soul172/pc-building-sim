@@ -667,12 +667,18 @@ func interact() -> void:
 		# Проверка прямого взгляда на закрытые стенки корпуса перед попыткой подбора / извлечения
 		if raycast and raycast.is_colliding():
 			var col = raycast.get_collider()
-			if col and (col.is_in_group("pc_case_body") or col.name == "PCCaseBody" or (pc_case and pc_case.is_ancestor_of(col) and col.name != "PowerButtonBody")):
-				if not case_lid_open:
-					show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
-					play_error_sound()
-					return
-				elif parts_mgr and not parts_mgr.can_access_case_interior(raycast.get_collision_point()):
+			var direct_part = find_part_node(col)
+			var is_inside_pc = pc_case and (pc_case.is_ancestor_of(col) or col == pc_case) and col.name != "PowerButtonBody"
+
+			if not case_lid_open and (is_inside_pc or (col and (col.is_in_group("case_lid") or col.name == "CaseLidBody"))):
+				show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
+				play_error_sound()
+				return
+
+			var is_part_or_slot = direct_part != null or (col and (col.is_in_group("parts") or col.name == "SlotBody" or col.name.begins_with("Socket_")))
+			var is_solid_wall = col and (col.is_in_group("pc_case_body") or col.name == "PCCaseBody" or col.name.begins_with("CaseWall"))
+			if is_solid_wall and not is_part_or_slot:
+				if parts_mgr and not parts_mgr.can_access_case_interior(raycast.get_collision_point()):
 					show_error("Детали не видны с этой стороны! Подойдите к открытой стороне корпуса.")
 					play_error_sound()
 					return
