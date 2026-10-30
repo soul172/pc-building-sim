@@ -87,18 +87,18 @@ func can_access_case_interior(target_world_pos: Vector3 = Vector3.ZERO) -> bool:
 	var cam_local = main.pc_case.to_local(main.camera.global_position)
 
 	# 1. Камера должна находиться с открытой стороны (+X):
-	# Нельзя быть сзади глухой стенки (x < 0.18) или слишком далеко за пределами корпуса по Z
-	if cam_local.x < 0.18:
+	# Нельзя быть сзади глухой стенки (x < 0.10) или слишком далеко за пределами корпуса по Z
+	if cam_local.x < 0.10:
 		return false
 
-	# Если игрок стоит сбоку передней (z > 0.55) или задней (z < -0.55) панели корпуса
-	if abs(cam_local.z) > 0.55:
+	# Если игрок стоит слишком далеко сбоку передней или задней панели корпуса
+	if abs(cam_local.z) > 0.75:
 		return false
 
-	# 2. Вектор взгляда камеры должен быть явно направлен внутрь открытого проёма (+X -> -X)
+	# 2. Вектор взгляда камеры должен быть направлен внутрь открытого проёма (+X -> -X)
 	var open_normal = main.pc_case.global_transform.basis.x.normalized()
 	var ray_dir = -main.camera.global_transform.basis.z.normalized()
-	if ray_dir.dot(open_normal) > -0.15:
+	if ray_dir.dot(open_normal) > 0.15:
 		return false
 
 	# 3. Проверка прохождения линии взгляда через плоскость открытого проёма (X = 0.245)
@@ -113,11 +113,11 @@ func can_access_case_interior(target_world_pos: Vector3 = Vector3.ZERO) -> bool:
 			var dx = dest_local.x - cam_local.x
 			if abs(dx) > 0.001:
 				var t = (plane_x - cam_local.x) / dx
-				if t >= 0.0 and t <= 1.05:
+				if t >= 0.0 and t <= 1.25:
 					var cross_y = cam_local.y + t * (dest_local.y - cam_local.y)
 					var cross_z = cam_local.z + t * (dest_local.z - cam_local.z)
-					# Окно проёма корпуса с небольшим допуском
-					if cross_y < -0.25 or cross_y > 0.25 or cross_z < -0.25 or cross_z > 0.25:
+					# Окно проёма корпуса с допуском для деталей на плате и у краёв
+					if cross_y < -0.30 or cross_y > 0.30 or cross_z < -0.30 or cross_z > 0.30:
 						return false
 	else:
 		# Если точной точки нет, проверяем траекторию луча камеры на пересечение с плоскостью проёма
@@ -128,7 +128,7 @@ func can_access_case_interior(target_world_pos: Vector3 = Vector3.ZERO) -> bool:
 			if t > 0.0:
 				var cross_y = cam_local.y + t * (ray_dest_local.y - cam_local.y)
 				var cross_z = cam_local.z + t * (ray_dest_local.z - cam_local.z)
-				if cross_y < -0.25 or cross_y > 0.25 or cross_z < -0.25 or cross_z > 0.25:
+				if cross_y < -0.30 or cross_y > 0.30 or cross_z < -0.30 or cross_z > 0.30:
 					return false
 
 	return true
@@ -514,7 +514,15 @@ func try_extract() -> bool:
 		return false
 
 	# 2. Проверка попадания в глухие стенки корпуса (запрет сквозного извлечения)
-	var is_case_wall = collider and (collider.is_in_group("pc_case_body") or collider.name == "PCCaseBody" or collider.name.begins_with("CaseWall") or (main.pc_case and collider != main.case_lid and main.pc_case.is_ancestor_of(collider) and not collider.is_in_group("parts") and collider.name != "SlotBody" and collider.name != "PowerButtonBody"))
+	var direct_part = find_part_node(collider)
+	var is_case_wall = false
+	if not direct_part:
+		if collider and (collider.is_in_group("pc_case_body") or collider.name == "PCCaseBody" or collider.name.begins_with("CaseWall")):
+			is_case_wall = true
+		elif main.pc_case and collider != main.case_lid and main.pc_case.is_ancestor_of(collider):
+			if collider.name != "SlotBody" and collider.name != "PowerButtonBody" and not collider.name.begins_with("Socket_") and not collider.is_in_group("parts"):
+				is_case_wall = true
+
 	if is_case_wall:
 		if not main.case_lid_open:
 			main.show_error("Откройте боковую крышку корпуса (F), чтобы получить доступ к деталям!")
@@ -524,14 +532,28 @@ func try_extract() -> bool:
 		return true
 
 	# 3. Прямой поиск детали по коллайдеру
-	var part = find_part_node(collider)
 	var target_slot_id = ""
-	if part:
-		target_slot_id = get_slot_for_part(part)
-		if target_slot_id == "":
-			return false
 
-	# 4. Поиск по близости к слоту (только если луч НЕ упёрся в глухую стенку корпуса)
+	# Если луч попал в материнскую плату, проверяем ближайшую деталь на плате (кулер, GPU, RAM, SSD, CPU)
+	if direct_part == main.motherboard_node and main.motherboard_installed:
+		var best_mb_dist = 999.0
+		var best_mb_slot = ""
+		for sid in ["cooler", "gpu", "ram1", "ram2", "ssd", "cpu"]:
+			if main.slots.has(sid) and main.slots[sid]["occupied"]:
+				var p_node = main.parts.get(main.slots[sid].get("part_id", ""), null)
+				if p_node and is_instance_valid(p_node):
+					var d = hit_pos.distance_to(p_node.global_position)
+					if d < best_mb_dist and d < 0.22:
+						best_mb_dist = d
+						best_mb_slot = sid
+		if best_mb_slot != "":
+			target_slot_id = best_mb_slot
+		else:
+			target_slot_id = "mb_slot"
+	elif direct_part:
+		target_slot_id = get_slot_for_part(direct_part)
+
+	# 4. Поиск по близости к слоту (если прямой поиск не дал результат)
 	if target_slot_id == "":
 		var best_dist = 999.0
 		for sid in main.slots:
